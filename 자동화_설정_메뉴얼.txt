@@ -1,0 +1,145 @@
+============================================================
+ 한·일 유튜브 이슈 대시보드 — 매일 자동 업데이트 설정 메뉴얼
+============================================================
+작성일: 2026-06-23
+저장소: https://github.com/shaunkimdev/Hot-youtube-board  (Public)
+배포 예정 주소: https://shaunkimdev.github.io/Hot-youtube-board/
+
+------------------------------------------------------------
+[0] 이 시스템이 하는 일
+------------------------------------------------------------
+매일 정해진 시각에 GitHub 클라우드에서 자동으로:
+ 1) 한국·일본 유튜브 인기영상 수집 (라이브/쇼츠/공식법인/해외 영상 제외)
+ 2) 개인 크리에이터 채널의 '롱폼' 영상만 9개 주제별 Top3 선정
+ 3) 라이징스타(구독 1만↓ 조회수 폭발 롱폼) 발굴
+ 4) Claude API로 영상 요약 + /watch 타임라인 자동 생성
+ 5) 웹 대시보드(site/) + 엑셀 생성 → GitHub Pages로 자동 공개
+ ※ 내 PC가 꺼져 있어도 GitHub 서버에서 실행됨.
+
+------------------------------------------------------------
+[1] 최초 1회 설정  (★ 이것만 끝내면 이후 자동)
+------------------------------------------------------------
+
+(1) API 키 시크릿 등록
+   - GOOGLE_API_KEY    : ★완료됨 (2026-06-23 등록)
+   - ANTHROPIC_API_KEY : ☐ 직접 등록 필요
+       방법 A) 웹: 저장소 → Settings → Secrets and variables → Actions
+               → New repository secret
+               Name = ANTHROPIC_API_KEY,  Secret = sk-ant-... (본인 키)
+       방법 B) PowerShell(새 창)에서:
+               gh secret set ANTHROPIC_API_KEY
+               → 실행 후 키 값을 붙여넣고 Enter
+
+   (키 발급처)
+     - YouTube Data API v3 키 : Google Cloud Console → API 및 서비스
+                                → 'YouTube Data API v3' 사용 설정 → 사용자 인증 정보
+     - Anthropic 키 : https://console.anthropic.com → API Keys (결제수단 등록 필요)
+
+(2) GitHub Pages 켜기
+   저장소 → Settings → Pages
+   → Build and deployment → Source = "GitHub Actions" 선택
+
+(3) 첫 실행(수동)으로 확인
+   저장소 → Actions 탭 → 왼쪽 'daily-youtube-dashboard'
+   → 오른쪽 'Run workflow' 버튼 클릭
+   → 2~3분 뒤 초록 체크 → 위 배포 주소 접속해 대시보드 확인
+
+------------------------------------------------------------
+[2] 자동 실행 일정
+------------------------------------------------------------
+ - 매일 한국시간(KST) 오전 8시 자동 실행
+   (설정 파일: .github/workflows/daily.yml 의  cron: "0 23 * * *"  = UTC 23시)
+ - 시각 변경: 위 cron 값을 UTC 기준으로 수정 후 git push
+   예) KST 오전 7시 = UTC 22시 → "0 22 * * *"
+
+------------------------------------------------------------
+[3] 매일 자동으로 일어나는 일 (손댈 것 없음)
+------------------------------------------------------------
+ run_daily.py 가 순서대로 실행:
+   discover2.py      → 인기영상 수집·필터
+   longform_rising.py→ 롱폼 필터 + 구독자수 조회
+   rising_search.py  → 라이징스타(롱폼) 발굴
+   summarize_llm.py  → Claude API 요약 + 타임라인 (ANTHROPIC_API_KEY 있을 때)
+   build_auto.py     → data.json + 엑셀 + 웹사이트 생성
+ → 결과를 저장소에 자동 커밋하고 GitHub Pages로 배포.
+
+------------------------------------------------------------
+[4] 결과물 위치
+------------------------------------------------------------
+ - 웹 대시보드 : https://shaunkimdev.github.io/Hot-youtube-board/
+ - 데이터       : site/data.json , site/archive/data_YYYY-MM-DD.json (날짜별 보관)
+ - 엑셀         : YouTube이슈분석_개인채널_YYYY-MM-DD.xlsx (저장소 루트)
+
+------------------------------------------------------------
+[5] 로컬 PC에서 수동으로 돌려보기 (선택)
+------------------------------------------------------------
+ 새 PowerShell에서:
+   cd C:\Users\hikim\Desktop\workplace\YoutubeAnalysis
+   $env:GOOGLE_API_KEY="...YouTube키..."
+   $env:ANTHROPIC_API_KEY="sk-ant-..."
+   pip install -r requirements.txt
+   python pipeline\run_daily.py
+ → site\index.html 더블클릭으로 확인.
+ (로컬엔 ffmpeg 설치 필요. ANTHROPIC 키 없으면 요약은 자동 폴백으로 생성)
+
+------------------------------------------------------------
+[6] 코드/설정 수정 후 반영하기
+------------------------------------------------------------
+   cd C:\Users\hikim\Desktop\workplace\YoutubeAnalysis
+   git add -A
+   git commit -m "수정 내용 메모"
+   git push
+ → push되면 다음 예약 시각에 자동 반영. 즉시 보려면 Actions→Run workflow.
+
+------------------------------------------------------------
+[7] 비용 · 쿼터 (참고)
+------------------------------------------------------------
+ - YouTube Data API : 무료 일 10,000 units. 하루 1회 실행이면 여유.
+   (검색 호출 search.list=100 units/회로 가장 큼. 과다 시 일시 차단될 수 있음)
+ - Anthropic API : 모델 claude-sonnet-4-6 기준 대략 하루 $0.3~$1
+   (프레임 분석이 비용 대부분. 워크플로우의 DEEP_MAX·ANTHROPIC_MODEL로 조절)
+ - GitHub Actions/Pages : Public 저장소는 무료.
+
+------------------------------------------------------------
+[8] 문제 해결 (Troubleshooting)
+------------------------------------------------------------
+ ▶ 워크플로우 실패(빨간 X)
+   - Actions 탭에서 해당 실행 클릭 → 로그 확인.
+   - 가장 흔한 원인: 시크릿 미등록 → [1](1) 다시 확인.
+
+ ▶ 'Search Queries per day' 쿼터 초과 (라이징스타 수집 실패)
+   - YouTube 검색 API 일일 한도 초과. 태평양시간 자정에 리셋.
+   - 해결: rising_search.py 의 검색 시드(SEED) 수를 줄이거나,
+           Google Cloud 콘솔에서 쿼터 상향 신청(무료).
+
+ ▶ 영상 다운로드 403/429 (프레임 분석 일부 실패)
+   - GitHub 클라우드 IP를 유튜브가 막는 경우.
+   - 해결: 브라우저 확장 'Get cookies.txt LOCALLY'로 youtube.com 쿠키를
+           내보내 → 시크릿 YT_COOKIES 에 파일 내용 붙여넣기.
+           (없어도 자막/텍스트 요약은 대부분 동작, 자동 폴백됨)
+   - 또는 워크플로우 env의 DEEP_MAX 값을 5~8로 낮춰 다운로드 횟수 감소.
+
+ ▶ Pages 주소가 안 열림
+   - Settings→Pages에서 Source가 "GitHub Actions"인지 확인.
+   - 첫 배포 후 1~2분 대기. Actions의 deploy-pages 단계 성공 확인.
+
+ ▶ 예약 실행이 멈춤
+   - GitHub는 60일간 저장소 활동이 없으면 예약(cron)을 자동 비활성화.
+   - 본 워크플로우는 매일 결과를 커밋하므로 보통 유지됨.
+   - 멈췄다면 Actions 탭에서 'Enable workflow' 한 번 클릭.
+
+------------------------------------------------------------
+[9] 핵심 파일 요약
+------------------------------------------------------------
+ .github/workflows/daily.yml ... 매일 실행 + Pages 배포 설정
+ requirements.txt ............... 파이썬 의존성(yt-dlp, xlsxwriter, anthropic)
+ pipeline/run_daily.py .......... 파이프라인 오케스트레이터(스케줄 대상)
+ pipeline/*.py .................. 수집/요약/빌드 단계별 스크립트
+ site/index.html, data.json ..... 웹 대시보드(공개됨)
+ AUTOMATION_GUIDE.md ............ 자동화 방식별 비교(상세)
+ GITHUB_PAGES_SETUP.md .......... GitHub Pages 설정 상세 가이드
+
+============================================================
+ 요약: [1]의 (1)ANTHROPIC 키 등록 + (2)Pages 켜기 + (3)Run workflow
+       — 이 3가지만 하면 매일 자동으로 대시보드가 갱신됩니다.
+============================================================

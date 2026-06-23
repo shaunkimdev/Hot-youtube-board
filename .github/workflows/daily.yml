@@ -1,0 +1,59 @@
+name: daily-youtube-dashboard
+
+# 매일 KST 08:00 (UTC 23:00) 자동 실행 + 수동 실행 버튼
+on:
+  schedule:
+    - cron: "0 23 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write      # 결과(data.json/엑셀/archive) 커밋
+  pages: write         # GitHub Pages 배포
+  id-token: write
+
+concurrency:
+  group: daily
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps (ffmpeg + python libs)
+        run: |
+          sudo apt-get update && sudo apt-get install -y ffmpeg
+          pip install -r requirements.txt
+
+      - name: Run daily pipeline
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_MODEL: claude-sonnet-4-6
+          DEEP_MAX: "12"
+          # 선택: YouTube 봇차단 회피용 쿠키(아래 8번 참고). 없으면 생략 가능.
+          YT_COOKIES: ${{ secrets.YT_COOKIES }}
+        run: |
+          if [ -n "$YT_COOKIES" ]; then printf '%s' "$YT_COOKIES" > pipeline/cookies.txt; fi
+          python pipeline/run_daily.py
+
+      - name: Commit results (data/excel/archive)
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add site/ *.xlsx || true
+          git commit -m "daily update $(date -u +%F)" || echo "no changes"
+          git push || echo "push skipped"
+
+      # --- GitHub Pages 배포 (site/ 폴더를 정적 사이트로) ---
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4

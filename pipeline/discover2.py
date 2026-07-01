@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """v2 discovery: more categories, exclude LIVE broadcasts, personal channels only."""
-import os, json, math, urllib.request, urllib.parse, datetime, sys, io
+import os, json, math, re, urllib.request, urllib.parse, datetime, sys, io
 from collections import defaultdict
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 KEY = os.environ["GOOGLE_API_KEY"]
@@ -83,17 +83,36 @@ OFFICIAL_TOKENS=["- topic"," topic","vevo","smtown","hybe","belift","bighit","bi
  "projectmoon","project moon","capcom","lost ark","로스트아크","riot games","nexon","넥슨","스마일게이트","pearl abyss",
  "mihoyo","hoyoverse","music awards","ceipa","mama awards"," inc","ⓒ","공식채널",
  "warner music","universal music","sony music","avex","victor entertainment","pony canyon","king record",
- # new-category official: leagues/brands/tourism
+ "エイベックス","ソニーミュージック","ユニバーサルミュージック","ワーナーミュージック","being inc","ビーイング",
+ # new-category official: leagues/brands/tourism/sports federations
  "kbo","k league","k리그","프로야구","npb","j.league","jリーグ","espn","dazn","삼성전자","samsung","lg전자",
- "apple","google","마이크로소프트","microsoft","관광공사","tourism","jal","ana official"]
+ "apple","google","마이크로소프트","microsoft","관광공사","tourism","jal","ana official",
+ "olympic","オリンピック","日本相撲協会","大相撲","b.league","bリーグ","高校野球","甲子園","日本サッカー協会",
+ "日本野球機構","프로배구","kbl","kovo"]
 OFFICIAL_ARTIST={"i-dle (아이들)","babymonster","bangtantv","blackpink","le sserafim","illit","katseye","evan",
  "ive","aespa","newjeans","nmixx","twice","stray kids","seventeen","tomorrow x together","txt","엔믹스",
  "米津玄師","kenshi yonezu","kenshi yonezu  米津玄師","mazzel","m!lk","aぇ! group","aぇ!group","hey! say! jump",
  "hey!say!jump","snow man","king & prince","naniwa danshi","なにわ男子","travis japan","be:first","jo1","ini",
- "timelesz","ado","yoasobi","official髭男dism"," official髭男","janet jackson","超特急","be:first"}
+ "timelesz","ado","yoasobi","official髭男dism"," official髭男","janet jackson","超特急","be:first",
+ "b'z","bz","ビーズ"}
 def is_official(title):
     t=(title or "").lower().strip()
     return any(x in t for x in OFFICIAL_ARTIST) or any(x in t for x in OFFICIAL_TOKENS)
+
+# ---- structural official-MV detector: catches labels/artist channels not in the
+# hand-maintained lists above. Official music-video uploads are almost always titled
+# "<ArtistName><separator><SongTitle>" where <ArtistName> matches the channel's own
+# name (e.g. channel "Bz" -> title "B'z / 完全無欠"); personal cover/reaction channels
+# essentially never format titles this way. ----
+_ALNUM = re.compile(r"[^0-9a-z가-힣぀-ヿ゠-ヿ一-鿿]")
+def _norm(s):
+    return _ALNUM.sub("", (s or "").lower())
+def looks_like_official_mv(channel, title):
+    ch = _norm(channel)
+    if len(ch) < 2:
+        return False
+    head = re.split(r"[/\-|｜―–—]", title or "", maxsplit=1)[0]
+    return _norm(head) == ch
 
 rows=[]; seen=set(); n_live=0; n_official=0
 for region in REGIONS:
@@ -107,6 +126,8 @@ for region in REGIONS:
             if is_live: n_live+=1; continue
             if cat in NATIVE_CATS and not native(region, sn.get("title","")): continue
             if is_official(sn.get("channelTitle","")): n_official+=1; continue
+            if cat == 10 and looks_like_official_mv(sn.get("channelTitle",""), sn.get("title","")):
+                n_official+=1; continue
             views=int(st.get("viewCount",0) or 0); likes=int(st.get("likeCount",0) or 0); comments=int(st.get("commentCount",0) or 0)
             hrs=hours_since(sn.get("publishedAt","")); ds,dl=iso_dur(it.get("contentDetails",{}).get("duration",""))
             issue=(views+20*likes+100*comments)/math.sqrt(hrs)

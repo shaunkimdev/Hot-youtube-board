@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """Replicate the /watch behavior with the Gemini API (for unattended CI).
 
-For SELECTED videos (top-1 per topic if watchable + all Rising Star):
-  yt-dlp download -> ffmpeg frames + captions -> send frames+transcript to Gemini
+For SELECTED videos (country(KR/JP) issue-score top5 across all topics + all Rising
+Star): yt-dlp download -> ffmpeg frames + captions -> send frames+transcript to Gemini
   (multimodal) -> 100자 요약 + 시청자 도움 한 줄.   == what /watch does.
 For the rest: text-only summary from title+description+captions (cheap, no download).
 
@@ -14,7 +14,8 @@ Env: GEMINI_API_KEY (required — separate from the GOOGLE_API_KEY used for the
      the Generative Language API is enabled on it, but a dedicated key is safer),
      GEMINI_MODEL (default gemini-3.1-flash-lite — cheapest current multimodal
      model, used for both the frame-based deep pass and the text-only pass),
-     DEEP_MAX (max # of frame-based deep analyses, default 12).
+     DEEP_MAX (safety cap on # of frame-based deep analyses, default 20 — headroom
+     above the structural max of 5(KR)+5(JP)+5(rising)=15 so nothing gets truncated).
 Deps: ffmpeg, yt-dlp (CLI), google-genai (pip).
 """
 import os, re, json, glob, subprocess, tempfile, sys, io
@@ -22,7 +23,7 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.1-flash-lite")
-DEEP_MAX = int(os.environ.get("DEEP_MAX", "12"))
+DEEP_MAX = int(os.environ.get("DEEP_MAX", "20"))
 WATCH = "/watch 심층분석(Gemini)"
 META = "메타데이터+자막(Gemini)"
 
@@ -166,12 +167,13 @@ def summarize(v, deep):
 def main():
     top = json.load(open(os.path.join(HERE, "top3_v3.json"), encoding="utf-8"))
     rising = json.load(open(os.path.join(HERE, "rising2.json"), encoding="utf-8"))[:5]
-    # choose DEEP set: rank-1 of each topic if 180<dur<=720, + all rising
+    # DEEP set (/watch 심층분석 대상): 나라(KR/JP)별 이슈점수 top5(전 주제 통합) + 모든 라이징스타
     deep_ids = set(v["video_id"] for v in rising)
-    for k, lst in top.items():
-        if lst and 180 < lst[0].get("duration_sec", 0) <= 720:
-            deep_ids.add(lst[0]["video_id"])
-    # cap deep count
+    for region in ("KR", "JP"):
+        pool = [v for k, lst in top.items() if k.startswith(region + "|") for v in lst]
+        pool.sort(key=lambda v: v.get("issue_score", 0), reverse=True)
+        deep_ids.update(v["video_id"] for v in pool[:5])
+    # safety cap (구조상 최대 5+5+5=15건이라 기본값에서는 잘리지 않음)
     deep_ids = set(list(deep_ids)[:DEEP_MAX])
 
     out = {}

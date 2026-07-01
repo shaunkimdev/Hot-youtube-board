@@ -34,7 +34,9 @@ jobs:
         env:
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          DEEP_MAX: "12"
+          # 나라별(KR/JP) 이슈점수 top5 + 라이징스타 전원(최대 5) = 최대 15건이 /watch 심층분석 대상.
+          # DEEP_MAX는 그 위 안전마진(잘림 방지)일 뿐, 값을 낮추면 top5 중 일부가 잘릴 수 있음.
+          DEEP_MAX: "20"
           # 선택: YouTube 봇차단 회피용 쿠키(아래 8번 참고). 없으면 생략 가능.
           YT_COOKIES: ${{ secrets.YT_COOKIES }}
         run: |

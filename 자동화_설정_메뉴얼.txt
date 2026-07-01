@@ -118,7 +118,9 @@
    - 해결: 브라우저 확장 'Get cookies.txt LOCALLY'로 youtube.com 쿠키를
            내보내 → 시크릿 YT_COOKIES 에 파일 내용 붙여넣기.
            (없어도 자막/텍스트 요약은 대부분 동작, 자동 폴백됨)
-   - 또는 워크플로우 env의 DEEP_MAX 값을 5~8로 낮춰 다운로드 횟수 감소.
+   - 또는 워크플로우 env의 DEEP_MAX 값을 낮춰 다운로드 횟수 감소.
+     (단, 나라별 이슈점수 top5씩 총 10건은 항상 심층분석 대상이라
+      15 미만으로 낮추면 그 중 일부가 잘릴 수 있음)
 
  ▶ Pages 주소가 안 열림
    - Settings→Pages에서 Source가 "GitHub Actions"인지 확인.
@@ -144,3 +146,6 @@
  요약: [1]의 (1)GEMINI 키 등록 + (2)Pages 켜기 + (3)Run workflow
        — 이 3가지만 하면 매일 자동으로 대시보드가 갱신됩니다.
 ============================================================
+
+page 주소
+https://shaunkimdev.github.io/Hot-youtube-board/

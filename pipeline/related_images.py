@@ -11,7 +11,7 @@ Wikimedia (Commons-backed) which returns attributable images for the subject."""
 import os, sys, json, shutil, urllib.request, urllib.parse, io
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
-PROJ = r"C:\Users\hikim\Desktop\workplace\YoutubeAnalysis"
+PROJ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ASSETS = os.path.join(PROJ, "site", "assets")
 THUMBS = os.path.join(PROJ, "pipeline", "thumbs")
 TARGETS = json.load(open(os.path.join(PROJ, "pipeline", "watch_targets.json"), encoding="utf-8"))

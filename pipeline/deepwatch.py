@@ -8,7 +8,7 @@ import os, sys, re, json, glob, subprocess, io
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
 SKILL = r"C:\Users\hikim\.claude\plugins\cache\claude-video\watch\0.1.3\scripts\watch.py"
-PROJ = r"C:\Users\hikim\Desktop\workplace\YoutubeAnalysis"
+PROJ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ASSETS = os.path.join(PROJ, "site", "assets")
 os.makedirs(ASSETS, exist_ok=True)
 

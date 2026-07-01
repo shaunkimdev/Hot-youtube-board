@@ -2,7 +2,7 @@
 """Generate a self-contained index.html (data inlined) for the dashboard."""
 import json, os
 HERE = os.path.dirname(os.path.abspath(__file__))
-PROJ = r"C:\Users\hikim\Desktop\workplace\YoutubeAnalysis"
+PROJ = os.path.dirname(HERE)
 SITE = os.path.join(PROJ, "site")
 data = json.load(open(os.path.join(SITE, "data.json"), encoding="utf-8"))
 DATE = data["date"]

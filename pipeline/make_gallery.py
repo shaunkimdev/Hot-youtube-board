@@ -3,7 +3,7 @@
 per analyzed video -> thumbnail + /watch frames + related subject images."""
 import os, json, io, sys
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
-PROJ = r"C:\Users\hikim\Desktop\workplace\YoutubeAnalysis"
+PROJ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ASSETS = os.path.join(PROJ, "site", "assets")
 man = json.load(open(os.path.join(ASSETS, "manifest.json"), encoding="utf-8"))
 

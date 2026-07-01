@@ -23,10 +23,10 @@ def main():
         log("ERROR: GOOGLE_API_KEY not set."); return 1
     env = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
     steps = ["discover2.py", "longform_rising.py", "rising_search.py"]
-    if os.environ.get("ANTHROPIC_API_KEY"):
-        steps.append("summarize_llm.py")   # Claude API summaries (/watch behavior)
+    if os.environ.get("GEMINI_API_KEY"):
+        steps.append("summarize_llm.py")   # Gemini API summaries (/watch behavior)
     else:
-        log("note: ANTHROPIC_API_KEY not set -> skipping LLM summaries (build will use fallback)")
+        log("note: GEMINI_API_KEY not set -> skipping LLM summaries (build will use fallback)")
     steps.append("build_auto.py")
     log(f"=== daily run start ({datetime.date.today().isoformat()}) ===")
     for s in steps:

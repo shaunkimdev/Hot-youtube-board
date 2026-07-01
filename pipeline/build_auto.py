@@ -39,7 +39,7 @@ def base(v, region):
     cc = "한국" if region == "KR" else "일본"; flag = "🇰🇷" if region == "KR" else "🇯🇵"
     vid = v["video_id"]
     timeline = TIMELINE.get(vid, [])
-    if vid in SUMMARIES:  # Claude API result (preferred)
+    if vid in SUMMARIES:  # Gemini API result (preferred)
         s = SUMMARIES[vid]
         en = (s.get("summary", ""), s.get("tip", ""), "", "", s.get("analysis", META))
         timeline = s.get("timeline", timeline)

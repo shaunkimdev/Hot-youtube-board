@@ -84,11 +84,13 @@ OFFICIAL_TOKENS=["- topic"," topic","vevo","smtown","hybe","belift","bighit","bi
  "mihoyo","hoyoverse","music awards","ceipa","mama awards"," inc","ⓒ","공식채널",
  "warner music","universal music","sony music","avex","victor entertainment","pony canyon","king record",
  "エイベックス","ソニーミュージック","ユニバーサルミュージック","ワーナーミュージック","being inc","ビーイング",
+ "entertainment","엔터","レーベル","label","music group","records japan",
  # new-category official: leagues/brands/tourism/sports federations
  "kbo","k league","k리그","프로야구","npb","j.league","jリーグ","espn","dazn","삼성전자","samsung","lg전자",
  "apple","google","마이크로소프트","microsoft","관광공사","tourism","jal","ana official",
  "olympic","オリンピック","日本相撲協会","大相撲","b.league","bリーグ","高校野球","甲子園","日本サッカー協会",
- "日本野球機構","프로배구","kbl","kovo"]
+ "日本野球機構","프로배구","kbl","kovo","spotv","spotvnow","spotv now","엠스플","mbc스포츠","sbs스포츠",
+ "kbs n스포츠","jtbc골프","coupang play","쿠팡플레이"]
 OFFICIAL_ARTIST={"i-dle (아이들)","babymonster","bangtantv","blackpink","le sserafim","illit","katseye","evan",
  "ive","aespa","newjeans","nmixx","twice","stray kids","seventeen","tomorrow x together","txt","엔믹스",
  "米津玄師","kenshi yonezu","kenshi yonezu  米津玄師","mazzel","m!lk","aぇ! group","aぇ!group","hey! say! jump",
@@ -114,6 +116,17 @@ def looks_like_official_mv(channel, title):
     head = re.split(r"[/\-|｜―–—]", title or "", maxsplit=1)[0]
     return _norm(head) == ch
 
+# ---- title-based official-MV marker: catches label-owned channels whose name is the
+# COMPANY, not the artist (e.g. channel "KQ ENTERTAINMENT" uploading "ATEEZ - 'BAD'
+# Official MV") — the channel-name-match heuristic above misses these, but genuine
+# official uploads almost always spell out "Official MV/Music Video" in the title;
+# personal cover/reaction/fancam videos essentially never do. ----
+OFFICIAL_TITLE_MARKERS = ["official mv", "official music video", "official audio", "official video",
+ "(mv)", "[mv]", "m/v)", "m/v]"]
+def has_official_title_marker(title):
+    t = (title or "").lower()
+    return any(x in t for x in OFFICIAL_TITLE_MARKERS)
+
 rows=[]; seen=set(); n_live=0; n_official=0
 for region in REGIONS:
     for cat in CATS:
@@ -126,7 +139,8 @@ for region in REGIONS:
             if is_live: n_live+=1; continue
             if cat in NATIVE_CATS and not native(region, sn.get("title","")): continue
             if is_official(sn.get("channelTitle","")): n_official+=1; continue
-            if cat == 10 and looks_like_official_mv(sn.get("channelTitle",""), sn.get("title","")):
+            if cat == 10 and (looks_like_official_mv(sn.get("channelTitle",""), sn.get("title",""))
+                              or has_official_title_marker(sn.get("title",""))):
                 n_official+=1; continue
             views=int(st.get("viewCount",0) or 0); likes=int(st.get("likeCount",0) or 0); comments=int(st.get("commentCount",0) or 0)
             hrs=hours_since(sn.get("publishedAt","")); ds,dl=iso_dur(it.get("contentDetails",{}).get("duration",""))

@@ -56,9 +56,9 @@ for k, lst in groups.items():
     top[f"{k[0]}|{k[1]}"] = lst[:3]
 json.dump(top, open(os.path.join(HERE,"top3_v3.json"),"w",encoding="utf-8"), ensure_ascii=False, indent=1)
 
-# ---- Rising Star: from FULL pool (shorts INCLUDED — tiny-channel virality is mostly shorts) ----
+# ---- Rising Star: from LONGFORM pool only (쇼츠 제외) ----
 RISE_MIN_VIEWS = 200000
-cand = [r for r in rows if r["subscribers"] is not None and 0 < r["subscribers"] <= 10000
+cand = [r for r in long_rows if r["subscribers"] is not None and 0 < r["subscribers"] <= 10000
         and r["views"] >= RISE_MIN_VIEWS]
 cand.sort(key=lambda x: x["views"], reverse=True)
 seen_ch, rising = set(), []
@@ -71,7 +71,7 @@ for r in cand:
 json.dump(rising, open(os.path.join(HERE,"rising.json"),"w",encoding="utf-8"), ensure_ascii=False, indent=1)
 
 # ---- report ----
-ORDER=["경제","정치","연예","TV쇼","음악","게임","스포츠","IT·테크","라이프"]
+ORDER=["경제","재테크","자기계발","연예","TV쇼","음악","게임","스포츠","IT·테크","라이프"]
 for region in ["KR","JP"]:
     print("="*60, region)
     for o in ORDER:

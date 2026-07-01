@@ -9,6 +9,15 @@ pipeline/run.log
 pipeline/candidates*.json
 pipeline/longform_all.json
 
+# /watch working cache under site/assets (videos & frames are huge & regenerable;
+# the published dashboard is self-contained and does not reference these)
+site/assets/*/download/
+site/assets/*/frames/
+*.part
+
+# temporary Excel lock files
+~$*.xlsx
+
 # python
 __pycache__/
 *.pyc

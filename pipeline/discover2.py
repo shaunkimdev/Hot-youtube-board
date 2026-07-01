@@ -7,7 +7,9 @@ KEY = os.environ["GOOGLE_API_KEY"]
 NOW = datetime.datetime.now(datetime.timezone.utc)
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-# category -> topic (single-cat ones); 24/25 split by keyword
+# category -> topic (single-cat ones); 24/25 split by keyword.
+# Politics(정치) is intentionally dropped. 재테크/자기계발 come from discover_topics.py (Search API),
+# because the mostPopular chart returns no Education/personal-finance content for KR/JP.
 CATS = [10, 20, 24, 25, 17, 28, 26]
 REGIONS = ["KR", "JP"]
 SINGLE = {10: "음악", 20: "게임", 17: "스포츠", 28: "IT·테크", 26: "라이프"}
@@ -61,8 +63,9 @@ def native(region,t):
 def classify(cat,title):
     if cat in SINGLE: return SINGLE[cat]
     t=title.lower(); hit=lambda ks: any(k.lower() in t for k in ks)
-    if cat==25: return "경제" if hit(KW["economy"]) else "정치"
     if cat==24: return "TV쇼" if hit(KW["tvshow"]) else "연예"
+    if cat==25:  # News&Politics -> 경제만 추출 (정치·일반뉴스 제외)
+        return "경제" if hit(KW["economy"]) else "기타"
     return "기타"
 
 def thumb(sn):
@@ -124,7 +127,7 @@ for k,lst in groups.items():
 json.dump(top,open(os.path.join(HERE,"top3_v2.json"),"w",encoding="utf-8"),ensure_ascii=False,indent=1)
 json.dump(rows,open(os.path.join(HERE,"candidates2.json"),"w",encoding="utf-8"),ensure_ascii=False,indent=1)
 print(f"personal non-live videos: {len(rows)} | excluded live: {n_live} | excluded official: {n_official}")
-ORDER=["경제","정치","연예","TV쇼","음악","게임","스포츠","IT·테크","라이프"]
+ORDER=["경제","재테크","자기계발","연예","TV쇼","음악","게임","스포츠","IT·테크","라이프"]
 for region in REGIONS:
     print("="*60,region)
     for o in ORDER:

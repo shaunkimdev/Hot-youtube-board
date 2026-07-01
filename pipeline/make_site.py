@@ -104,6 +104,9 @@ header.top{position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--s
 .posted{font-size:11.5px;color:var(--muted)}
 .hl{background:color-mix(in srgb,var(--accent2) 7%,transparent);border-left:3px solid var(--accent2);
   border-radius:0 10px 10px 0;padding:10px 12px;font-size:13px;font-weight:600;line-height:1.6;color:var(--text)}
+.hl ul.sum{margin:0;padding-left:17px;font-weight:500;display:flex;flex-direction:column;gap:4px}
+.hl ul.sum li{line-height:1.5}
+.hl ul.sum li::marker{color:var(--accent2)}
 .tip{font-size:12.5px;color:var(--muted);line-height:1.6}
 .tl{display:flex;flex-direction:column;gap:5px;background:color-mix(in srgb,var(--accent) 6%,transparent);
   border-left:3px solid var(--accent);border-radius:0 10px 10px 0;padding:9px 11px}
@@ -164,12 +167,12 @@ html[data-theme="dark"] .rs.mult{background:#5c4813;color:#ffe08a}
 <div class="wrap">
   <section class="hero">
     <h2>오늘 가장 이슈된 영상, 한눈에</h2>
-    <p>한국·일본 유튜브 인기 피드를 9개 주제별로 모아 <b>개인 크리에이터 채널의 롱폼</b> 영상만 추렸습니다(<b>쇼츠·라이브 제외</b>). 조회수·좋아요·댓글과 최근성을 가중한 <b>이슈점수</b> 순.</p>
+    <p>한국·일본 유튜브 인기 피드를 10개 주제별로 모아 <b>개인 크리에이터 채널의 롱폼</b> 영상만 추렸습니다(<b>쇼츠·라이브·정치 제외</b>). 조회수·좋아요·댓글과 최근성을 가중한 <b>이슈점수</b> 순.</p>
     <div class="stats">
       <div class="stat"><b>__N__</b><span>롱폼 영상</span></div>
       <div class="stat"><b>🇰🇷 __NKR__</b><span>한국</span></div>
       <div class="stat"><b>🇯🇵 __NJP__</b><span>일본</span></div>
-      <div class="stat"><b>9</b><span>주제 카테고리</span></div>
+      <div class="stat"><b>10</b><span>주제 카테고리</span></div>
       <div class="stat"><b>🎬 __NDEEP__</b><span>/watch 심층분석</span></div>
     </div>
   </section>
@@ -216,12 +219,17 @@ html[data-theme="dark"] .rs.mult{background:#5c4813;color:#ffe08a}
 
 <script>
 const DATA = __DATA__;
-const TOPICS = ["경제","정치","연예","TV쇼","음악","게임","스포츠","IT·테크","라이프"];
-const TCOLOR = {"경제":"#e8590c","정치":"#f08c00","연예":"#2f9e44","TV쇼":"#1971c2","음악":"#9c36b5","게임":"#6741d9","스포츠":"#0ca678","IT·테크":"#1098ad","라이프":"#e8418c"};
+const TOPICS = ["경제","재테크","자기계발","연예","TV쇼","음악","게임","스포츠","IT·테크","라이프"];
+const TCOLOR = {"경제":"#e8590c","재테크":"#f08c00","자기계발":"#2b8a3e","연예":"#2f9e44","TV쇼":"#1971c2","음악":"#9c36b5","게임":"#6741d9","스포츠":"#0ca678","IT·테크":"#1098ad","라이프":"#e8418c"};
 let state={country:"all",topic:"all",q:"",sort:"issue"};
 
 const fmt=n=>n>=10000?(n/10000).toFixed(n>=100000?0:1).replace(/\.0$/,'')+"만":n.toLocaleString();
 const esc=s=>(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function sumBlock(s){
+  const lines=(s||"").split("\n").map(x=>x.trim()).filter(Boolean);
+  if(lines.length<=1) return esc(s);
+  return '<ul class="sum">'+lines.map(l=>`<li>${esc(l)}</li>`).join("")+'</ul>';
+}
 function tlBlock(r){
   if(!r.timeline||!r.timeline.length) return "";
   return '<div class="tl"><div class="tl-h">⏱ /watch 타임라인</div>'+
@@ -267,8 +275,9 @@ function render(){
           <span class="m">🔥 <small>이슈</small> ${fmt(r.issue)}</span>
         </div>
         <div class="posted">게시 ${r.published} · ${r.hours}시간 전</div>
-        <div class="hl">${esc(r.summary)}</div>
-        ${tlBlock(r)||`<div class="tip ${warn?'warn':''}">💡 ${esc(r.tip)}</div>`}
+        <div class="hl">${sumBlock(r.summary)}</div>
+        ${tlBlock(r)}
+        ${r.tip?`<div class="tip ${warn?'warn':''}">💡 ${esc(r.tip)}</div>`:""}
         <div class="foot">
           <a class="btn play" href="${r.url}" target="_blank">▶ 영상</a>
           ${art}

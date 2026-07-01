@@ -18,7 +18,7 @@ SUMMARIES = {}
 _sp = os.path.join(HERE, "summaries.json")
 if os.path.exists(_sp):
     SUMMARIES = json.load(open(_sp, encoding="utf-8"))
-ORDER = ["경제", "정치", "연예", "TV쇼", "음악", "게임", "스포츠", "IT·테크", "라이프"]
+ORDER = ["경제", "재테크", "자기계발", "연예", "TV쇼", "음악", "게임", "스포츠", "IT·테크", "라이프"]
 
 def auto_summary(v):
     """Fallback ~100자 summary from description/title when not hand-authored."""
@@ -76,8 +76,14 @@ json.dump(payload, open(os.path.join(SITE, "data.json"), "w", encoding="utf-8"),
 arch = os.path.join(SITE, "archive"); os.makedirs(arch, exist_ok=True)
 json.dump(payload, open(os.path.join(arch, f"data_{DATE}.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
 
-# Excel (dated)
+# Excel (dated) — if the target is locked (open in Excel), fall back to a suffixed name
+# so the rest of the build (data.json + site) still completes.
 OUT = os.path.join(PROJ, f"YouTube이슈분석_개인채널_{DATE}.xlsx")
+try:
+    open(OUT, "a").close()  # touch to detect a lock before we build the workbook
+except PermissionError:
+    OUT = os.path.join(PROJ, f"YouTube이슈분석_개인채널_{DATE}_new.xlsx")
+    print(f"[build_auto] WARNING: original xlsx is open/locked -> writing {os.path.basename(OUT)} instead")
 wb = xlsxwriter.Workbook(OUT, {"strings_to_urls": False})
 hd = wb.add_format({"bold": True, "bg_color": "#2F5496", "font_color": "white", "border": 1, "text_wrap": True, "align": "center", "valign": "vcenter"})
 cl = wb.add_format({"border": 1, "valign": "top", "text_wrap": True, "font_size": 9}); cc_ = wb.add_format({"border": 1, "align": "center", "valign": "vcenter", "font_size": 9})

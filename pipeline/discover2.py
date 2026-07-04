@@ -30,6 +30,7 @@ KW = {
 def http(url):
     with urllib.request.urlopen(url, timeout=30) as r: return json.load(r)
 
+errors=[]
 def fetch(region, cat):
     items, page = [], None
     for _ in range(2):
@@ -37,7 +38,9 @@ def fetch(region, cat):
              "regionCode":region,"videoCategoryId":cat,"maxResults":50,"key":KEY}
         if page: p["pageToken"]=page
         try: d = http("https://www.googleapis.com/youtube/v3/videos?"+urllib.parse.urlencode(p))
-        except Exception as e: print("!",region,cat,e,file=sys.stderr); break
+        except Exception as e:
+            errors.append(f"{region}/{cat}: {e}")
+            print("!",region,cat,e,file=sys.stderr); break
         items += d.get("items", []); page = d.get("nextPageToken")
         if not page: break
     return items
@@ -171,3 +174,11 @@ for region in REGIONS:
         print(f"[{o}] {len(lst)}건")
         for i,v in enumerate(lst,1):
             print(f"  {i}. {v['channel']} [{v['duration']}] issue={v['issue_score']:,} :: {v['title'][:40]}")
+
+# if every API call failed (e.g. bad/quota-exceeded key), rows will be empty even
+# though nothing "looked" wrong per-category -> fail loudly instead of silently
+# producing an empty dashboard.
+if errors and not rows:
+    print(f"FATAL: all {len(errors)} YouTube API calls failed, 0 videos collected. "
+          f"First error: {errors[0]}", file=sys.stderr)
+    sys.exit(1)

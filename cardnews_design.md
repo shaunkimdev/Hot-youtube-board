@@ -231,6 +231,56 @@
 - 워드 파일 안에는 4-2 템플릿 내용(인트로 후크 + 7개 정보 블록 + 해시태그)을 그대로 담는다.
   줄바꿈·이모지는 원문 그대로 유지.
 
+#### ⚠️ 한글·이모지 폰트 깨짐 방지 (필수)
+
+**원인**: python-docx의 `Document()` 기본 템플릿은 런(run) 단위에 폰트를 전혀 지정하지 않는다.
+전부 `Normal` 스타일 → 테마 폰트(`docDefaults`)에만 의존하는데, 그 `docDefaults`의
+`w:lang`이 `eastAsia="en-US"`로 박혀 있고(한국어 아님), 이모지(📺👀📝✅🔗⭐🇰🇷🇯🇵 등)는
+테마의 동아시아/라틴 폰트 매핑표에 아예 글꼴이 없다. 그 결과 워드/뷰어에 따라 한글이
+엉뚱한 폰트로 렌더링되거나 이모지가 네모(tofu)로 깨져 보인다.
+(실제로 2026-07-05 캡션 파일에서 이 문제가 발생해 확인함 — 모든 run에 `rPr`/`rFonts`가
+전혀 없이 저장되어 있었다.)
+
+**수정 방침**: 문서 생성 시 아래처럼 **모든 run에 한글 폰트를 명시적으로 박아 넣는다**
+(테마 상속에 의존하지 않음):
+
+```python
+from docx import Document
+from docx.shared import Pt
+from docx.oxml.ns import qn
+
+FONT = "맑은 고딕"  # Malgun Gothic — Windows 기본 탑재, 한글 완비
+
+def set_korean_font(run, name=FONT):
+    run.font.name = name  # w:ascii / w:hAnsi
+    rPr = run._element.get_or_add_rPr()
+    rFonts = rPr.find(qn('w:rFonts')) or rPr.makeelement(qn('w:rFonts'), {})
+    if rFonts not in rPr:
+        rPr.insert(0, rFonts)
+    rFonts.set(qn('w:eastAsia'), name)   # ← 이 줄이 핵심 (동아시아 폰트 명시)
+    rFonts.set(qn('w:cs'), name)
+    lang = rPr.find(qn('w:lang')) or rPr.makeelement(qn('w:lang'), {})
+    if lang not in rPr:
+        rPr.append(lang)
+    lang.set(qn('w:eastAsia'), 'ko-KR')  # ← en-US 오류 수정
+
+# Normal 스타일에도 동일하게 적용 (문서 기본값 자체를 고침)
+style = doc.styles['Normal']
+style.font.name = FONT
+# ... 위와 동일한 rFonts/eastAsia/lang 처리를 style.element에도 적용
+
+# 문단 추가 시 항상 run에 적용
+para = doc.add_paragraph()
+run = para.add_run(text)
+set_korean_font(run)
+```
+
+- 새 파일을 만들 때마다 이 헬퍼로 **모든 run**에 폰트를 지정한다 (Normal 스타일만 건드리고
+  run에 안 넣으면 일부 뷰어에서 다시 깨질 수 있음).
+- 저장 시도 시 `PermissionError`/`Device or resource busy`가 나면 **해당 .docx가 다른
+  프로그램(Word 등)에서 열려 있다는 뜻**이므로, 사용자에게 파일을 닫아달라고 요청한 뒤
+  다시 저장한다. 스크래치패드에 임시 저장 후 닫힘을 확인하고 옮기는 것도 방법.
+
 ---
 
 ## 5. Canva MCP 실행 절차
@@ -266,3 +316,5 @@
 - [ ] 7개 영상 모두 4-1 포맷(제목/채널/조회수/소개/봐야 하는 이유/링크) 정보 블록 작성 완료
 - [ ] 카드 문구와 캡션 정보 블록의 제목·조회수·채널명 표기가 서로 일치
 - [ ] 캡션이 `카드뉴스_YYYY-MM-DD/캡션_YYYY-MM-DD.docx`로 저장됨 (이미지와 같은 폴더)
+- [ ] 캡션 .docx의 모든 run에 한글 폰트(예: 맑은 고딕)와 `eastAsia`/`lang` 속성이 명시적으로
+      설정됨 (4-3 "한글·이모지 폰트 깨짐 방지" 코드 사용, 테마 상속에 의존하지 않음)

@@ -7,16 +7,25 @@ SITE = os.path.join(PROJ, "site")
 data = json.load(open(os.path.join(SITE, "data.json"), encoding="utf-8"))
 DATE = data["date"]
 N = len(data["rows"])
-nKR = sum(1 for r in data["rows"] if r["country"] == "한국")
-nJP = N - nKR
 nDEEP = sum(1 for r in data["rows"] + data.get("rising", []) if "watch" in r["analysis"])
+# dynamic country stats (country, flag) -> count, in first-seen order
+COUNTRY_ORDER = []
+COUNTRY_COUNT = {}
+for r in data["rows"]:
+    k = (r["country"], r["flag"])
+    if k not in COUNTRY_COUNT: COUNTRY_ORDER.append(k)
+    COUNTRY_COUNT[k] = COUNTRY_COUNT.get(k, 0) + 1
+STAT_HTML = "".join(f'<div class="stat"><b>{flag} {COUNTRY_COUNT[(cc,flag)]}</b><span>{cc}</span></div>'
+                     for cc, flag in COUNTRY_ORDER)
+COUNTRY_BTN_HTML = '<button data-c="all" class="on">전체</button>' + "".join(
+    f'<button data-c="{cc}">{flag} {cc}</button>' for cc, flag in COUNTRY_ORDER)
 
 TPL = r"""<!DOCTYPE html>
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>한·일 유튜브 이슈 트렌드 · __DATE__</title>
+<title>글로벌 유튜브 이슈 트렌드 · __DATE__</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
 <style>
 :root{
@@ -156,7 +165,7 @@ html[data-theme="dark"] .rs.mult{background:#5c4813;color:#ffe08a}
 <header class="top"><div class="wrap">
   <div class="brand">
     <div class="logo">▶</div>
-    <div><h1>한·일 유튜브 이슈 트렌드</h1><div class="sub">개인 크리에이터 채널 · 주제별 Top 3</div></div>
+    <div><h1>글로벌 유튜브 이슈 트렌드</h1><div class="sub">개인 크리에이터 채널 · 주제별 Top 3</div></div>
   </div>
   <div class="tools">
     <span class="badge-live">● __DATE__ 기준</span>
@@ -167,11 +176,10 @@ html[data-theme="dark"] .rs.mult{background:#5c4813;color:#ffe08a}
 <div class="wrap">
   <section class="hero">
     <h2>오늘 가장 이슈된 영상, 한눈에</h2>
-    <p>한국·일본 유튜브 인기 피드를 10개 주제별로 모아 <b>개인 크리에이터 채널의 롱폼</b> 영상만 추렸습니다(<b>쇼츠·라이브·정치 제외</b>). 조회수·좋아요·댓글과 최근성을 가중한 <b>이슈점수</b> 순.</p>
+    <p>한국·일본·미국·영국·독일·프랑스 유튜브 인기 피드를 10개 주제별로 모아 <b>개인 크리에이터 채널의 롱폼</b> 영상만 추렸습니다(<b>쇼츠·라이브·정치 제외</b>). 조회수·좋아요·댓글과 최근성을 가중한 <b>이슈점수</b> 순.</p>
     <div class="stats">
       <div class="stat"><b>__N__</b><span>롱폼 영상</span></div>
-      <div class="stat"><b>🇰🇷 __NKR__</b><span>한국</span></div>
-      <div class="stat"><b>🇯🇵 __NJP__</b><span>일본</span></div>
+      __STATS__
       <div class="stat"><b>10</b><span>주제 카테고리</span></div>
       <div class="stat"><b>🎬 __NDEEP__</b><span>/watch 심층분석</span></div>
     </div>
@@ -191,9 +199,7 @@ html[data-theme="dark"] .rs.mult{background:#5c4813;color:#ffe08a}
   <section class="controls">
     <div class="row" style="margin-bottom:10px">
       <div class="seg" id="country">
-        <button data-c="all" class="on">전체</button>
-        <button data-c="한국">🇰🇷 한국</button>
-        <button data-c="일본">🇯🇵 일본</button>
+        __COUNTRY_BTNS__
       </div>
       <div class="search">🔍<input id="q" placeholder="제목·채널·내용 검색"></div>
       <select class="select" id="sort">
@@ -212,7 +218,7 @@ html[data-theme="dark"] .rs.mult{background:#5c4813;color:#ffe08a}
 </div>
 
 <footer class="ft"><div class="wrap">
-  <b>방법론</b> · YouTube Data API mostPopular(KR/JP×카테고리) 수집 → 음반사·방송사·신문사·게임사·공식 아티스트 채널 제외 후 개인채널만 추출.
+  <b>방법론</b> · YouTube Data API mostPopular(KR/JP/US/GB/DE/FR×카테고리) 수집 → 음반사·방송사·신문사·게임사·공식 아티스트 채널 제외 후 개인채널만 추출.
   이슈점수 = (조회수 + 좋아요×20 + 댓글×100) ÷ √게시경과h. ※ API상 '24시간 조회 증가량'은 직접 제공되지 않아 누적 통계 기반 근사치.
   <b>분석</b> 배지가 ‘/watch 심층’인 카드는 영상 다운로드 후 프레임+자막으로 직접 분석. ⚠️ 표시는 자극·클릭베이트 우려로 교차확인 권장.
 </div></footer>
@@ -321,6 +327,7 @@ chips();render();renderRising();
 
 html = (TPL.replace("__DATA__", json.dumps(data, ensure_ascii=False))
            .replace("__DATE__", DATE).replace("__N__", str(N))
-           .replace("__NKR__", str(nKR)).replace("__NJP__", str(nJP)).replace("__NDEEP__", str(nDEEP)))
+           .replace("__STATS__", STAT_HTML).replace("__COUNTRY_BTNS__", COUNTRY_BTN_HTML)
+           .replace("__NDEEP__", str(nDEEP)))
 open(os.path.join(SITE, "index.html"), "w", encoding="utf-8").write(html)
 print("SITE:", os.path.join(SITE, "index.html"), "(", len(html), "bytes )")

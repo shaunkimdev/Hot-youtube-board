@@ -11,8 +11,12 @@ def http(url):
 
 # broad seed queries per region to surface recent viral videos across topics
 SEED = {"KR": ["뉴스","이슈","논란","경기","리뷰","게임","음악","꿀팁","브이로그","속보"],
-        "JP": ["ニュース","話題","炎上","試合","レビュー","ゲーム","音楽","裏技","検証","速報"]}
-LANG = {"KR": "ko", "JP": "ja"}
+        "JP": ["ニュース","話題","炎上","試合","レビュー","ゲーム","音楽","裏技","検証","速報"],
+        "US": ["news","controversy","game highlights","review","music","life hack","vlog","breaking news"],
+        "GB": ["news","controversy","match highlights","review","music","life hack","vlog","breaking news"],
+        "DE": ["nachrichten","kontroverse","highlights","rezension","musik","lifehacks","vlog","eilmeldung"],
+        "FR": ["actualités","polémique","highlights","critique","musique","astuces","vlog","dernière minute"]}
+LANG = {"KR": "ko", "JP": "ja", "US": "en", "GB": "en", "DE": "de", "FR": "fr"}
 
 vid_region = {}
 for region, seeds in SEED.items():
@@ -55,10 +59,14 @@ def dur(s):
     return t,(f"{h}:{mi:02d}:{se:02d}" if h else f"{mi}:{se:02d}")
 
 def native(region, t):
-    for ch in t:
-        o = ord(ch)
-        if region=="KR" and (0xAC00<=o<=0xD7A3 or 0x1100<=o<=0x11FF or 0x3130<=o<=0x318F): return True
-        if region=="JP" and (0x3040<=o<=0x309F or 0x30A0<=o<=0x30FF): return True
+    if region=="KR":
+        return any(0xAC00<=ord(ch)<=0xD7A3 or 0x1100<=ord(ch)<=0x11FF or 0x3130<=ord(ch)<=0x318F for ch in t)
+    if region=="JP":
+        return any(0x3040<=ord(ch)<=0x309F or 0x30A0<=ord(ch)<=0x30FF for ch in t)
+    if region in ("US","GB","DE","FR"):
+        FOREIGN = ((0xAC00,0xD7A3),(0x1100,0x11FF),(0x3130,0x318F),(0x3040,0x30FF),
+                   (0x4E00,0x9FFF),(0x0600,0x06FF),(0x0400,0x04FF),(0x0E00,0x0E7F))
+        return not any(any(lo<=ord(ch)<=hi for lo,hi in FOREIGN) for ch in t)
     return False
 
 cand = []

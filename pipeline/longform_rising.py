@@ -72,7 +72,7 @@ json.dump(rising, open(os.path.join(HERE,"rising.json"),"w",encoding="utf-8"), e
 
 # ---- report ----
 ORDER=["경제","재테크","자기계발","연예","TV쇼","음악","게임","스포츠","IT·테크","라이프"]
-for region in ["KR","JP"]:
+for region in ["KR","JP","US","GB","DE","FR"]:
     print("="*60, region)
     for o in ORDER:
         k=next((kk for kk in top if kk.startswith(region+"|") and kk.split("|")[1]==o),None)

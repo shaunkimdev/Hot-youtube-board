@@ -11,20 +11,35 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # Politics(정치) is intentionally dropped. 재테크/자기계발 come from discover_topics.py (Search API),
 # because the mostPopular chart returns no Education/personal-finance content for KR/JP.
 CATS = [10, 20, 24, 25, 17, 28, 26]
-REGIONS = ["KR", "JP"]
+REGIONS = ["KR", "JP", "US", "GB", "DE", "FR"]
 SINGLE = {10: "음악", 20: "게임", 17: "스포츠", 28: "IT·테크", 26: "라이프"}
 # native-script required for local-relevance topics (exclude foreign viral)
 NATIVE_CATS = {24, 25, 17, 28, 26}  # not music(10)/gaming(20) which are global
 
 KW = {
  "economy": ["경제","증시","주가","주식","코스피","코스닥","금리","환율","부동산","집값","물가","연봉","월급","투자","비트코인","코인","반도체","수출","gdp","삼성전자",
-              "経済","株","株価","円安","円高","金利","為替","物価","投資","ビットコイン","不動産","給料","年収","日経","g7"],
+              "経済","株","株価","円安","円高","金利","為替","物価","投資","ビットコイン","不動産","給料","年収","日経","g7",
+              "economy","stock market","stocks","inflation","interest rate","housing market","recession","earnings",
+              "crypto","bitcoin","dow jones","nasdaq","s&p 500","federal reserve","tariff","economic",
+              "wirtschaft","aktien","börse","inflation","zinsen","immobilien","rezession","bip","gehalt","kryptowährung","dax",
+              "économie","bourse","actions","inflation","taux d'intérêt","immobilier","récession","pib","salaire","crypto-monnaie","cac 40"],
  "politics": ["정치","대통령","국회","여당","야당","민주당","국민의힘","장관","총리","선거","의원","청와대","대선","탄핵","외교","정부","北",
-               "政治","首相","総理","選挙","国会","議員","内閣","与党","野党","政権","大統領","外交","政府","自民党","市長"],
+               "政治","首相","総理","選挙","国会","議員","内閣","与党","野党","政権","大統領","外交","政府","自民党","市長",
+               "politics","president","congress","senate","election","government","white house","prime minister",
+               "parliament","impeachment",
+               "politik","bundeskanzler","bundestag","wahl","regierung","minister","koalition",
+               "politique","président","assemblée nationale","élection","gouvernement","ministre","sénat"],
  "celeb": ["연예","배우","아이돌","가수","스캔들","열애","결혼","이혼","논란","유튜버","인플루언서","셀럽","연예인",
-            "芸能","俳優","女優","アイドル","歌手","熱愛","結婚","離婚","スキャンダル","炎上","インフルエンサー"],
+            "芸能","俳優","女優","アイドル","歌手","熱愛","結婚","離婚","スキャンダル","炎上","インフルエンサー",
+            "celebrity","actor","actress","singer","idol","scandal","dating","married","divorce","controversy",
+            "youtuber","influencer",
+            "prominente","schauspieler","sängerin","skandal","liebesaus","heirat","scheidung",
+            "célébrité","acteur","actrice","chanteuse","scandale","mariage","divorce","influenceur"],
  "tvshow": ["예능","프로그램","방송","쇼","드라마","무한도전","런닝맨","나혼자","미운우리","라디오스타","출연","콩트",
-             "バラエティ","番組","ドラマ","放送","ショー","テレビ","出演","コント","あるある"],
+             "バラエティ","番組","ドラマ","放送","ショー","テレビ","出演","コント","あるある",
+             "tv show","reality show","broadcast","episode","season finale","sitcom","talk show",
+             "fernsehshow","sendung","staffel","folge","reality tv",
+             "émission","télé-réalité","saison","épisode","talk-show"],
 }
 
 def http(url):
@@ -57,10 +72,21 @@ def iso_dur(s):
     return tot,(f"{h}:{mi:02d}:{se:02d}" if h else f"{mi}:{se:02d}")
 
 def native(region,t):
-    for ch in t:
-        o=ord(ch)
-        if region=="KR" and (0xAC00<=o<=0xD7A3 or 0x1100<=o<=0x11FF or 0x3130<=o<=0x318F): return True
-        if region=="JP" and (0x3040<=o<=0x309F or 0x30A0<=o<=0x30FF): return True
+    if region=="KR":
+        return any(0xAC00<=ord(ch)<=0xD7A3 or 0x1100<=ord(ch)<=0x11FF or 0x3130<=ord(ch)<=0x318F for ch in t)
+    if region=="JP":
+        return any(0x3040<=ord(ch)<=0x309F or 0x30A0<=ord(ch)<=0x30FF for ch in t)
+    if region in ("US","GB","DE","FR"):
+        # No cheap script-based test distinguishes English/German/French from each
+        # other, so we settle for excluding titles that are obviously non-Latin-script
+        # (CJK/Hangul/Arabic/Cyrillic/Thai) — catches foreign-viral spillover in the
+        # regional chart without needing real language identification.
+        FOREIGN = (
+            (0xAC00,0xD7A3),(0x1100,0x11FF),(0x3130,0x318F),  # Hangul
+            (0x3040,0x30FF),(0x4E00,0x9FFF),                  # Kana/CJK ideographs
+            (0x0600,0x06FF),(0x0400,0x04FF),(0x0E00,0x0E7F),  # Arabic/Cyrillic/Thai
+        )
+        return not any(any(lo<=ord(ch)<=hi for lo,hi in FOREIGN) for ch in t)
     return False
 
 def classify(cat,title):
@@ -93,7 +119,15 @@ OFFICIAL_TOKENS=["- topic"," topic","vevo","smtown","hybe","belift","bighit","bi
  "apple","google","마이크로소프트","microsoft","관광공사","tourism","jal","ana official",
  "olympic","オリンピック","日本相撲協会","大相撲","b.league","bリーグ","高校野球","甲子園","日本サッカー協会",
  "日本野球機構","프로배구","kbl","kovo","spotv","spotvnow","spotv now","엠스플","mbc스포츠","sbs스포츠",
- "kbs n스포츠","jtbc골프","coupang play","쿠팡플레이"]
+ "kbs n스포츠","jtbc골프","coupang play","쿠팡플레이",
+ # US/UK/DE/FR broadcasters & major press (official-only, not personal channels)
+ "bbc","itv","sky news","channel 4","channel 5","cnn","fox news","msnbc","nbc news",
+ "abc news","cbs news","npr","the new york times","washington post","the guardian",
+ "reuters","associated press","bloomberg","cnbc","nfl","nba","premier league",
+ "ard","zdf","rtl","sat.1","pro7","prosieben","n-tv","ntv","der spiegel","bild",
+ "tagesschau","zeit online","süddeutsche zeitung",
+ "tf1","france 2","france 3","france info","franceinfo","bfmtv","le monde","le figaro",
+ "libération","l'équipe","canal+","m6"]
 OFFICIAL_ARTIST={"i-dle (아이들)","babymonster","bangtantv","blackpink","le sserafim","illit","katseye","evan",
  "ive","aespa","newjeans","nmixx","twice","stray kids","seventeen","tomorrow x together","txt","엔믹스",
  "米津玄師","kenshi yonezu","kenshi yonezu  米津玄師","mazzel","m!lk","aぇ! group","aぇ!group","hey! say! jump",

@@ -35,8 +35,11 @@ def dl(vid, url):
         open(p, "wb").write(urllib.request.urlopen(req, timeout=20).read()); return p
     except Exception: return None
 
+COUNTRY = {"KR": ("한국","🇰🇷"), "JP": ("일본","🇯🇵"), "US": ("미국","🇺🇸"),
+           "GB": ("영국","🇬🇧"), "DE": ("독일","🇩🇪"), "FR": ("프랑스","🇫🇷")}
+
 def base(v, region):
-    cc = "한국" if region == "KR" else "일본"; flag = "🇰🇷" if region == "KR" else "🇯🇵"
+    cc, flag = COUNTRY.get(region, (region, ""))
     vid = v["video_id"]
     timeline = TIMELINE.get(vid, [])
     if vid in SUMMARIES:  # Gemini API result (preferred)
@@ -56,7 +59,7 @@ def base(v, region):
 
 RISE_GENRE = {"GxS8Val7Gs4": "스포츠", "1L2FHEMSY_0": "연예", "hvsrOgrqzM4": "경제", "V_FvHTM9krs": "연예", "SYEChi_5gXU": "음악"}
 rows = []
-for region in ["KR", "JP"]:
+for region in ["KR", "JP", "US", "GB", "DE", "FR"]:
     for o in ORDER:
         k = next((kk for kk in top if kk.startswith(region + "|") and kk.split("|")[1] == o), None)
         if not k: continue

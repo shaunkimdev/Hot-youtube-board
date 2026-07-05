@@ -7,7 +7,7 @@ PROJ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ASSETS = os.path.join(PROJ, "site", "assets")
 man = json.load(open(os.path.join(ASSETS, "manifest.json"), encoding="utf-8"))
 
-FLAG = {"KR": "🇰🇷", "JP": "🇯🇵"}
+FLAG = {"KR": "🇰🇷", "JP": "🇯🇵", "US": "🇺🇸", "GB": "🇬🇧", "DE": "🇩🇪", "FR": "🇫🇷"}
 cards = []
 for vid, d in man.items():
     im = d["images"]

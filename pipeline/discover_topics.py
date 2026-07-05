@@ -16,16 +16,26 @@ MIN_VIEWS = 20000  # niche topics view less than trending
 # 3 seed queries per (topic, region) — keeps Search quota modest (~48 calls)
 QUERIES = {
  "재테크": {"KR": ["재테크", "주식 투자", "부동산 투자"],
-           "JP": ["投資 初心者", "新nisa", "資産運用"]},
+           "JP": ["投資 初心者", "新nisa", "資産運用"],
+           "US": ["personal finance", "stock investing", "real estate investing"],
+           "GB": ["personal finance uk", "stock investing", "property investing"],
+           "DE": ["geldanlage", "aktien investieren", "immobilien investieren"],
+           "FR": ["finance personnelle", "investir en bourse", "investissement immobilier"]},
  "자기계발": {"KR": ["자기계발", "동기부여", "공부법"],
-            "JP": ["自己啓発", "モチベーション", "勉強法"]},
+            "JP": ["自己啓発", "モチベーション", "勉強法"],
+            "US": ["self improvement", "motivation", "study tips"],
+            "GB": ["self improvement", "motivation", "study tips"],
+            "DE": ["persönlichkeitsentwicklung", "motivation", "lerntipps"],
+            "FR": ["développement personnel", "motivation", "méthode de travail"]},
 }
-LANG = {"KR": "ko", "JP": "ja"}
+LANG = {"KR": "ko", "JP": "ja", "US": "en", "GB": "en", "DE": "de", "FR": "fr"}
 
 # reuse the official-channel blocklist concept from discover2 (broadcasters/labels/brands)
 OFFICIAL_TOKENS = ["- topic", " topic", "vevo", "공식", "公式", "엔터테인먼트", "레이블", "sbs", "mbc", "kbs",
  "jtbc", "tv조선", "채널a", "mbn", "ytn", "연합뉴스", "한국경제", "매일경제", "한경", "ニュース", "新聞",
- "nhk", "tbs", "テレビ", "증권방송", "経済テレビ", "기획재정부", "금융감독원"]
+ "nhk", "tbs", "テレビ", "증권방송", "経済テレビ", "기획재정부", "금융감독원",
+ "bbc", "cnbc", "bloomberg", "the motley fool", "ard", "zdf", "n-tv", "handelsblatt",
+ "bfmtv", "les echos", "capital.fr"]
 def is_official(title):
     t = (title or "").lower().strip()
     return any(x in t for x in OFFICIAL_TOKENS)
@@ -44,10 +54,15 @@ def iso_dur(s):
     return tot, (f"{h}:{mi:02d}:{se:02d}" if h else f"{mi}:{se:02d}")
 
 def native(region, t):
-    for ch in t:
-        o = ord(ch)
-        if region == "KR" and (0xAC00 <= o <= 0xD7A3 or 0x1100 <= o <= 0x11FF or 0x3130 <= o <= 0x318F): return True
-        if region == "JP" and (0x3040 <= o <= 0x309F or 0x30A0 <= o <= 0x30FF): return True
+    if region == "KR":
+        return any(0xAC00<=ord(ch)<=0xD7A3 or 0x1100<=ord(ch)<=0x11FF or 0x3130<=ord(ch)<=0x318F for ch in t)
+    if region == "JP":
+        return any(0x3040<=ord(ch)<=0x309F or 0x30A0<=ord(ch)<=0x30FF for ch in t)
+    if region in ("US", "GB", "DE", "FR"):
+        # same relaxed "not obviously foreign-script" heuristic as discover2.py
+        FOREIGN = ((0xAC00,0xD7A3),(0x1100,0x11FF),(0x3130,0x318F),(0x3040,0x30FF),
+                   (0x4E00,0x9FFF),(0x0600,0x06FF),(0x0400,0x04FF),(0x0E00,0x0E7F))
+        return not any(any(lo<=ord(ch)<=hi for lo,hi in FOREIGN) for ch in t)
     return False
 
 def thumb(sn):
@@ -113,7 +128,7 @@ json.dump(existing, open(path, "w", encoding="utf-8"), ensure_ascii=False, inden
 print(f"discover_topics: matched {len(rows)} longform videos, appended {added} new to candidates2.json")
 from collections import Counter
 c = Counter((r["region"], r["topic"]) for r in rows)
-for region in ("KR", "JP"):
+for region in ("KR", "JP", "US", "GB", "DE", "FR"):
     for topic in ("재테크", "자기계발"):
         cnt = c.get((region, topic), 0)
         print(f"  [{region}] {topic}: {cnt}건", end="")

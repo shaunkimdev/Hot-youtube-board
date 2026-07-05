@@ -85,6 +85,10 @@ def native(region,t):
             (0xAC00,0xD7A3),(0x1100,0x11FF),(0x3130,0x318F),  # Hangul
             (0x3040,0x30FF),(0x4E00,0x9FFF),                  # Kana/CJK ideographs
             (0x0600,0x06FF),(0x0400,0x04FF),(0x0E00,0x0E7F),  # Arabic/Cyrillic/Thai
+            (0x0590,0x05FF),(0x0370,0x03FF),                  # Hebrew/Greek
+            (0x0900,0x097F),(0x0980,0x09FF),(0x0A00,0x0A7F),  # Devanagari/Bengali/Gurmukhi
+            (0x0A80,0x0AFF),(0x0B80,0x0BFF),(0x0C00,0x0C7F),  # Gujarati/Tamil/Telugu
+            (0x0C80,0x0CFF),(0x0D00,0x0D7F),                  # Kannada/Malayalam
         )
         return not any(any(lo<=ord(ch)<=hi for lo,hi in FOREIGN) for ch in t)
     return False

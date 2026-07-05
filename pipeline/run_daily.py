@@ -8,7 +8,11 @@ Runs: discover2        (collect mostPopular, exclude live/official/foreign/ì •ì¹
 
 Requires env var GOOGLE_API_KEY. Run:  python run_daily.py
 """
-import subprocess, sys, os, datetime
+import subprocess, sys, os, datetime, io
+# force UTF-8 stdout: collected titles/channels can now contain any script (Bengali,
+# Devanagari, Cyrillic, ...) now that US/GB/DE/FR are in scope, and Windows' default
+# console codepage (cp949 under a Korean locale) can't encode most of them -> crash.
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 LOG = os.path.join(HERE, "run.log")

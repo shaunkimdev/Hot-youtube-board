@@ -18,14 +18,21 @@ SUMMARIES = {}
 _sp = os.path.join(HERE, "summaries.json")
 if os.path.exists(_sp):
     SUMMARIES = json.load(open(_sp, encoding="utf-8"))
-ORDER = ["경제", "재테크", "자기계발", "연예", "TV쇼", "음악", "게임", "스포츠", "IT·테크", "라이프"]
+ORDER = ["해외반응", "스캔들", "IT", "돈", "여행", "갈등", "e스포츠", "연애", "사회핫이슈", "라이프", "일본핫이슈"]
+
+def _has_hangul(s):
+    return any(0xAC00 <= ord(ch) <= 0xD7A3 for ch in s)
 
 def auto_summary(v):
-    """Fallback ~100자 summary from description/title when not hand-authored."""
+    """Fallback ~100자 summary when not hand-authored/LLM-summarized. 엑셀 내용은
+    한국어로 작성해야 하므로, 원본 설명이 한국어가 아니면 원문을 그대로 노출하지 않고
+    한국어 안내문으로 대체한다(비한국어 원문 노출 방지)."""
     d = " ".join((v.get("description") or "").split())
     d = re.sub(r"https?://\S+", "", d).strip()
     base = d if len(d) >= 20 else v["title"]
-    return (base[:98] + "…") if len(base) > 99 else base
+    if _has_hangul(base):
+        return (base[:98] + "…") if len(base) > 99 else base
+    return f"자동 요약 미지원(비한국어 원문) — '{v['channel']}' 채널 영상, 원본 링크로 직접 확인하세요."
 
 def dl(vid, url):
     p = os.path.join(THUMB, f"{vid}.jpg")
@@ -35,8 +42,7 @@ def dl(vid, url):
         open(p, "wb").write(urllib.request.urlopen(req, timeout=20).read()); return p
     except Exception: return None
 
-COUNTRY = {"KR": ("한국","🇰🇷"), "JP": ("일본","🇯🇵"), "US": ("미국","🇺🇸"),
-           "GB": ("영국","🇬🇧"), "DE": ("독일","🇩🇪"), "FR": ("프랑스","🇫🇷")}
+COUNTRY = {"KR": ("한국","🇰🇷"), "JP": ("일본","🇯🇵"), "US": ("미국","🇺🇸")}
 
 def base(v, region):
     cc, flag = COUNTRY.get(region, (region, ""))
@@ -54,12 +60,13 @@ def base(v, region):
         "title": v["title"], "channel": v["channel"], "published": v["published_at"][:10],
         "hours": v.get("hours_since", 0), "duration": v["duration"], "views": v["views"],
         "likes": v.get("likes", 0), "comments": v.get("comments", 0), "issue": v.get("issue_score", 0),
+        "subscribers": v.get("subscribers"), "views_per_sub": v.get("views_per_sub"),
         "summary": en[0], "tip": en[1], "article_title": en[2], "article_url": en[3],
         "url": v["url"], "thumb": v["thumbnail"], "analysis": en[4], "timeline": timeline}
 
 RISE_GENRE = {"GxS8Val7Gs4": "스포츠", "1L2FHEMSY_0": "연예", "hvsrOgrqzM4": "경제", "V_FvHTM9krs": "연예", "SYEChi_5gXU": "음악"}
 rows = []
-for region in ["KR", "JP", "US", "GB", "DE", "FR"]:
+for region in ["KR", "JP", "US"]:
     for o in ORDER:
         k = next((kk for kk in top if kk.startswith(region + "|") and kk.split("|")[1] == o), None)
         if not k: continue
@@ -91,18 +98,25 @@ wb = xlsxwriter.Workbook(OUT, {"strings_to_urls": False})
 hd = wb.add_format({"bold": True, "bg_color": "#2F5496", "font_color": "white", "border": 1, "text_wrap": True, "align": "center", "valign": "vcenter"})
 cl = wb.add_format({"border": 1, "valign": "top", "text_wrap": True, "font_size": 9}); cc_ = wb.add_format({"border": 1, "align": "center", "valign": "vcenter", "font_size": 9})
 nm = wb.add_format({"border": 1, "align": "right", "valign": "vcenter", "num_format": "#,##0", "font_size": 9})
+rt = wb.add_format({"border": 1, "align": "right", "valign": "vcenter", "num_format": "0.00", "font_size": 9})
 def tl_text(d):
     if d.get("timeline"):
         return "⏱ 타임라인\n" + "\n".join(f"· {t[0]}  {t[1]}" for t in d["timeline"])
     return d["tip"]
-COLS = ["날짜","국가","주제","순위","제목","채널","게시일","길이","조회수","좋아요","댓글","이슈점수","상세요약","도움내용/⏱타임라인","영상링크","분석방식"]
+COLS = ["날짜","국가","주제","순위","제목","채널","게시일","길이","조회수","좋아요","댓글","이슈점수",
+        "구독자","구독자대비조회수","상세요약","도움내용/⏱타임라인","영상링크","분석방식"]
 for name, data in [("전체", rows), ("라이징스타", rising)]:
     ws = wb.add_worksheet(name)
     for c, h in enumerate(COLS): ws.write(0, c, h, hd)
     for i, d in enumerate(data, 1):
         ws.write_row(i, 0, [d["date"], d["country"], d["topic"], d["rank"], d["title"], d["channel"], d["published"], d["duration"]], cc_)
         for col, key in [(8,"views"),(9,"likes"),(10,"comments"),(11,"issue")]: ws.write_number(i, col, d[key], nm)
-        ws.write(i, 12, d["summary"], cl); ws.write(i, 13, tl_text(d), cl); ws.write_url(i, 14, d["url"], cc_, "▶"); ws.write(i, 15, d["analysis"], cc_)
+        subs = d.get("subscribers"); vps = d.get("views_per_sub")
+        if subs is None: ws.write(i, 12, "비공개", cc_)
+        else: ws.write_number(i, 12, subs, nm)
+        if vps is None: ws.write(i, 13, "-", cc_)
+        else: ws.write_number(i, 13, vps, rt)
+        ws.write(i, 14, d["summary"], cl); ws.write(i, 15, tl_text(d), cl); ws.write_url(i, 16, d["url"], cc_, "▶"); ws.write(i, 17, d["analysis"], cc_)
 wb.close()
 
 # regenerate self-contained site

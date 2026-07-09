@@ -1,216 +1,217 @@
 # -*- coding: utf-8 -*-
-"""v2 discovery: more categories, exclude LIVE broadcasts, personal channels only."""
+"""Search-API discovery across 11 FIXED thematic categories, per region
+(KR/JP/US only). Personal channels only; LIVE 제외; 롱폼만(4~20분, 쇼츠 제외).
+
+These 11 categories (해외반응/스캔들/IT/돈/여행/갈등/e스포츠/연애/사회핫이슈/라이프/
+일본핫이슈) don't map onto YouTube's own videoCategoryId taxonomy, so — unlike the
+old mostPopular-chart approach — collection here is 100% Search-API query based.
+
+Quota note: search.list costs 100 units/call and the default YouTube Data API
+quota caps search.list at ~100 calls/day *for the whole project* (shared with
+rising_search.py). Region scope is intentionally limited to KR/JP/US (not the
+earlier KR/JP/US/GB/DE/FR) and each (category, region) gets exactly 2 seed
+queries x 1 duration(medium) = 10*3*2 + 일본핫이슈(2 regions)*2 = 64 calls here,
+leaving headroom for rising_search.py's ~24 calls within the shared 100/day cap.
+
+일본핫이슈 = 해외(자국 밖)에서 일본을 다루는 영상(문화·여행·이슈) -> JP 리전은 제외
+(자국 이야기는 '해외 시선'이 아니므로)."""
 import os, json, math, re, urllib.request, urllib.parse, datetime, sys, io
 from collections import defaultdict
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 KEY = os.environ["GOOGLE_API_KEY"]
 NOW = datetime.datetime.now(datetime.timezone.utc)
 HERE = os.path.dirname(os.path.abspath(__file__))
+AFTER = (NOW - datetime.timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ")
+REGIONS = ["KR", "JP", "US"]
+LANG = {"KR": "ko", "JP": "ja", "US": "en"}
+MIN_VIEWS = 20000
 
-# category -> topic (single-cat ones); 24/25 split by keyword.
-# Politics(정치) is intentionally dropped. 재테크/자기계발 come from discover_topics.py (Search API),
-# because the mostPopular chart returns no Education/personal-finance content for KR/JP.
-CATS = [10, 20, 24, 25, 17, 28, 26]
-REGIONS = ["KR", "JP", "US", "GB", "DE", "FR"]
-SINGLE = {10: "음악", 20: "게임", 17: "스포츠", 28: "IT·테크", 26: "라이프"}
-# native-script required for local-relevance topics (exclude foreign viral)
-NATIVE_CATS = {24, 25, 17, 28, 26}  # not music(10)/gaming(20) which are global
-
-KW = {
- "economy": ["경제","증시","주가","주식","코스피","코스닥","금리","환율","부동산","집값","물가","연봉","월급","투자","비트코인","코인","반도체","수출","gdp","삼성전자",
-              "経済","株","株価","円安","円高","金利","為替","物価","投資","ビットコイン","不動産","給料","年収","日経","g7",
-              "economy","stock market","stocks","inflation","interest rate","housing market","recession","earnings",
-              "crypto","bitcoin","dow jones","nasdaq","s&p 500","federal reserve","tariff","economic",
-              "wirtschaft","aktien","börse","inflation","zinsen","immobilien","rezession","bip","gehalt","kryptowährung","dax",
-              "économie","bourse","actions","inflation","taux d'intérêt","immobilier","récession","pib","salaire","crypto-monnaie","cac 40"],
- "politics": ["정치","대통령","국회","여당","야당","민주당","국민의힘","장관","총리","선거","의원","청와대","대선","탄핵","외교","정부","北",
-               "政治","首相","総理","選挙","国会","議員","内閣","与党","野党","政権","大統領","外交","政府","自民党","市長",
-               "politics","president","congress","senate","election","government","white house","prime minister",
-               "parliament","impeachment",
-               "politik","bundeskanzler","bundestag","wahl","regierung","minister","koalition",
-               "politique","président","assemblée nationale","élection","gouvernement","ministre","sénat"],
- "celeb": ["연예","배우","아이돌","가수","스캔들","열애","결혼","이혼","논란","유튜버","인플루언서","셀럽","연예인",
-            "芸能","俳優","女優","アイドル","歌手","熱愛","結婚","離婚","スキャンダル","炎上","インフルエンサー",
-            "celebrity","actor","actress","singer","idol","scandal","dating","married","divorce","controversy",
-            "youtuber","influencer",
-            "prominente","schauspieler","sängerin","skandal","liebesaus","heirat","scheidung",
-            "célébrité","acteur","actrice","chanteuse","scandale","mariage","divorce","influenceur"],
- "tvshow": ["예능","프로그램","방송","쇼","드라마","무한도전","런닝맨","나혼자","미운우리","라디오스타","출연","콩트",
-             "バラエティ","番組","ドラマ","放送","ショー","テレビ","出演","コント","あるある",
-             "tv show","reality show","broadcast","episode","season finale","sitcom","talk show",
-             "fernsehshow","sendung","staffel","folge","reality tv",
-             "émission","télé-réalité","saison","épisode","talk-show"],
+QUERIES = {
+ "해외반응": {
+   "KR": ["해외반응", "외국인 반응 한국"],
+   "JP": ["海外の反応", "外国人 反応 日本"],
+   "US": ["foreigners react", "foreign reaction video"],
+ },
+ "스캔들": {
+   "KR": ["연예인 스캔들", "열애설"],
+   "JP": ["芸能人 スキャンダル", "炎上 芸能人"],
+   "US": ["celebrity scandal", "celebrity controversy"],
+ },
+ "IT": {
+   "KR": ["IT 리뷰", "신제품 언박싱"],
+   "JP": ["ガジェット レビュー", "新製品 開封"],
+   "US": ["tech review", "new gadget unboxing"],
+ },
+ "돈": {
+   "KR": ["재테크", "주식 투자"],
+   "JP": ["投資 初心者", "新nisa"],
+   "US": ["personal finance", "stock investing"],
+ },
+ "여행": {
+   "KR": ["여행 브이로그", "여행 트러블"],
+   "JP": ["旅行 トラブル", "海外旅行 vlog"],
+   "US": ["travel vlog", "travel disaster"],
+ },
+ "갈등": {
+   "KR": ["유튜버 논란", "저격 폭로"],
+   "JP": ["炎上 事件", "暴露 対立"],
+   "US": ["youtuber drama", "callout video"],
+ },
+ "e스포츠": {
+   "KR": ["e스포츠 대회", "프로게이머"],
+   "JP": ["eスポーツ 大会", "プロゲーマー"],
+   "US": ["esports tournament", "pro gamer highlights"],
+ },
+ "연애": {
+   "KR": ["연애 브이로그", "연애 고민 상담"],
+   "JP": ["恋愛 vlog", "恋愛相談"],
+   "US": ["dating vlog", "relationship advice"],
+ },
+ "사회핫이슈": {
+   "KR": ["사회 이슈", "논란 사건"],
+   "JP": ["社会問題", "話題 ニュース"],
+   "US": ["social issue", "viral controversy"],
+ },
+ "라이프": {
+   "KR": ["브이로그", "일상 꿀팁"],
+   "JP": ["vlog 日常", "生活 裏技"],
+   "US": ["daily vlog", "life hack"],
+ },
+ "일본핫이슈": {
+   "KR": ["일본 여행 근황", "일본 이슈"],
+   "US": ["japan news", "japan travel vlog"],
+ },
 }
+
+# ---- official/broadcaster/label/press/league blocklist (personal channels only) ----
+OFFICIAL_TOKENS = ["- topic", " topic", "vevo", "smtown", "hybe", "belift", "bighit", "big hit", "source music",
+ "jyp", "yg entertainment", "starship", "pledis", "stone music", "1thek", "genie music", "dreamus", "kakao entertainment",
+ "kozco", "ador official", "records", "엔터테인먼트", "레이블", "sbs", "mbc", "kbs", "jtbc", "tv조선", "채널a", "mbn", "ytn",
+ "연합뉴스", "매일신문", "조선일보", "한겨레", "동아일보", "경향신문", "한국경제", "매일경제", "한경", "テレビ",
+ "ニュース", "新聞", "放送局", "報道ステーション", "ann", "nhk", "tbs", "フジ", "日テレ", "テレ朝", "文化人放送局", "カンテレ", "公式",
+ "riot games", "nexon", "넥슨", "스마일게이트", "pearl abyss", "esl", "blast premier", "valorant champions",
+ "lck", "lpl", "lec", "lcs",
+ "music awards", "ceipa", "mama awards", " inc", "ⓒ", "공식채널",
+ "warner music", "universal music", "sony music", "avex", "victor entertainment", "pony canyon", "king record",
+ "エイベックス", "ソニーミュージック", "ユニバーサルミュージック", "ワーナーミュージック", "being inc", "ビーイング",
+ "entertainment", "엔터", "レーベル", "label", "music group", "records japan",
+ "kbo", "k league", "k리그", "프로야구", "npb", "j.league", "jリーグ", "espn", "dazn", "삼성전자", "samsung", "lg전자",
+ "apple", "google", "마이크로소프트", "microsoft", "관광공사", "tourism", "jal", "ana official",
+ "olympic", "オリンピック", "日本相撲協会", "大相撲", "b.league", "bリーグ", "高校野球", "甲子園", "日本サッカー協会",
+ "日本野球機構", "프로배구", "kbl", "kovo", "spotv", "spotvnow", "spotv now", "엠스플", "mbc스포츠", "sbs스포츠",
+ "kbs n스포츠", "jtbc골프", "coupang play", "쿠팡플레이",
+ "bbc", "itv", "sky news", "channel 4", "channel 5", "cnn", "fox news", "msnbc", "nbc news",
+ "abc news", "cbs news", "npr", "the new york times", "washington post", "the guardian",
+ "reuters", "associated press", "bloomberg", "cnbc", "nfl", "nba", "premier league",
+ "ard", "zdf", "rtl", "sat.1", "pro7", "prosieben", "n-tv", "ntv", "der spiegel", "bild",
+ "tagesschau", "zeit online", "süddeutsche zeitung", "handelsblatt",
+ "tf1", "france 2", "france 3", "france info", "franceinfo", "bfmtv", "le monde", "le figaro",
+ "libération", "l'équipe", "canal+", "m6", "capital.fr",
+ "기획재정부", "금융감독원", "증권방송", "経済テレビ", "the motley fool",
+ "テレビ朝日", "フジテレビ", "日本テレビ", "毎日放送", "朝日放送", "読売テレビ",
+ "吉本興業", "ジャニーズ", "スターダスト", "ホリプロ", "サンミュージック"]
+def is_official(title):
+    t = (title or "").lower().strip()
+    return any(x in t for x in OFFICIAL_TOKENS)
 
 def http(url):
     with urllib.request.urlopen(url, timeout=30) as r: return json.load(r)
 
-errors=[]
-def fetch(region, cat):
-    items, page = [], None
-    for _ in range(2):
-        p = {"part":"snippet,statistics,contentDetails,liveStreamingDetails","chart":"mostPopular",
-             "regionCode":region,"videoCategoryId":cat,"maxResults":50,"key":KEY}
-        if page: p["pageToken"]=page
-        try: d = http("https://www.googleapis.com/youtube/v3/videos?"+urllib.parse.urlencode(p))
-        except Exception as e:
-            errors.append(f"{region}/{cat}: {e}")
-            print("!",region,cat,e,file=sys.stderr); break
-        items += d.get("items", []); page = d.get("nextPageToken")
-        if not page: break
-    return items
-
 def hours_since(iso):
-    try: return max((NOW-datetime.datetime.fromisoformat(iso.replace("Z","+00:00"))).total_seconds()/3600,0.5)
+    try: return max((NOW - datetime.datetime.fromisoformat(iso.replace("Z", "+00:00"))).total_seconds()/3600, 0.5)
     except: return 999.0
 
 def iso_dur(s):
-    import re
-    m=re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?",s or "")
-    if not m: return 0,""
-    h,mi,se=(int(x) if x else 0 for x in m.groups()); tot=h*3600+mi*60+se
-    return tot,(f"{h}:{mi:02d}:{se:02d}" if h else f"{mi}:{se:02d}")
+    m = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", s or "")
+    if not m: return 0, ""
+    h, mi, se = (int(x) if x else 0 for x in m.groups()); tot = h*3600 + mi*60 + se
+    return tot, (f"{h}:{mi:02d}:{se:02d}" if h else f"{mi}:{se:02d}")
 
-def native(region,t):
-    if region=="KR":
+def native(region, t):
+    if region == "KR":
         return any(0xAC00<=ord(ch)<=0xD7A3 or 0x1100<=ord(ch)<=0x11FF or 0x3130<=ord(ch)<=0x318F for ch in t)
-    if region=="JP":
+    if region == "JP":
         return any(0x3040<=ord(ch)<=0x309F or 0x30A0<=ord(ch)<=0x30FF for ch in t)
-    if region in ("US","GB","DE","FR"):
-        # No cheap script-based test distinguishes English/German/French from each
-        # other, so we settle for excluding titles that are obviously non-Latin-script
-        # (CJK/Hangul/Arabic/Cyrillic/Thai) — catches foreign-viral spillover in the
-        # regional chart without needing real language identification.
-        FOREIGN = (
-            (0xAC00,0xD7A3),(0x1100,0x11FF),(0x3130,0x318F),  # Hangul
-            (0x3040,0x30FF),(0x4E00,0x9FFF),                  # Kana/CJK ideographs
-            (0x0600,0x06FF),(0x0400,0x04FF),(0x0E00,0x0E7F),  # Arabic/Cyrillic/Thai
-            (0x0590,0x05FF),(0x0370,0x03FF),                  # Hebrew/Greek
-            (0x0900,0x097F),(0x0980,0x09FF),(0x0A00,0x0A7F),  # Devanagari/Bengali/Gurmukhi
-            (0x0A80,0x0AFF),(0x0B80,0x0BFF),(0x0C00,0x0C7F),  # Gujarati/Tamil/Telugu
-            (0x0C80,0x0CFF),(0x0D00,0x0D7F),                  # Kannada/Malayalam
-        )
+    if region == "US":
+        FOREIGN = ((0xAC00,0xD7A3),(0x1100,0x11FF),(0x3130,0x318F),(0x3040,0x30FF),
+                   (0x4E00,0x9FFF),(0x0600,0x06FF),(0x0400,0x04FF),(0x0E00,0x0E7F),
+                   (0x0590,0x05FF),(0x0370,0x03FF),(0x0900,0x097F),(0x0980,0x09FF),
+                   (0x0A00,0x0A7F),(0x0A80,0x0AFF),(0x0B80,0x0BFF),(0x0C00,0x0C7F),
+                   (0x0C80,0x0CFF),(0x0D00,0x0D7F))
         return not any(any(lo<=ord(ch)<=hi for lo,hi in FOREIGN) for ch in t)
     return False
 
-def classify(cat,title):
-    if cat in SINGLE: return SINGLE[cat]
-    t=title.lower(); hit=lambda ks: any(k.lower() in t for k in ks)
-    if cat==24: return "TV쇼" if hit(KW["tvshow"]) else "연예"
-    if cat==25:  # News&Politics -> 경제만 추출 (정치·일반뉴스 제외)
-        return "경제" if hit(KW["economy"]) else "기타"
-    return "기타"
-
 def thumb(sn):
-    th=sn.get("thumbnails",{})
-    for k in ("maxres","standard","high","medium","default"):
+    th = sn.get("thumbnails", {})
+    for k in ("maxres", "standard", "high", "medium", "default"):
         if k in th: return th[k]["url"]
     return ""
 
-# ---- official-channel detector (from filter_personal, extended) ----
-OFFICIAL_TOKENS=["- topic"," topic","vevo","smtown","hybe","belift","bighit","big hit","source music",
- "jyp","yg entertainment","starship","pledis","stone music","1thek","genie music","dreamus","kakao entertainment",
- "kozco","ador official","records","엔터테인먼트","레이블","sbs","mbc","kbs","jtbc","tv조선","채널a","mbn","ytn",
- "연합뉴스","매일신문","조선일보","한겨레","동아일보","경향신문","한국경제","매일경제","한경","테レビ","テレビ",
- "ニュース","新聞","放送局","報道ステーション","ann","nhk","tbs","フジ","日テレ","テレ朝","文化人放送局","カンテレ","公式",
- "projectmoon","project moon","capcom","lost ark","로스트아크","riot games","nexon","넥슨","스마일게이트","pearl abyss",
- "mihoyo","hoyoverse","music awards","ceipa","mama awards"," inc","ⓒ","공식채널",
- "warner music","universal music","sony music","avex","victor entertainment","pony canyon","king record",
- "エイベックス","ソニーミュージック","ユニバーサルミュージック","ワーナーミュージック","being inc","ビーイング",
- "entertainment","엔터","レーベル","label","music group","records japan",
- # new-category official: leagues/brands/tourism/sports federations
- "kbo","k league","k리그","프로야구","npb","j.league","jリーグ","espn","dazn","삼성전자","samsung","lg전자",
- "apple","google","마이크로소프트","microsoft","관광공사","tourism","jal","ana official",
- "olympic","オリンピック","日本相撲協会","大相撲","b.league","bリーグ","高校野球","甲子園","日本サッカー協会",
- "日本野球機構","프로배구","kbl","kovo","spotv","spotvnow","spotv now","엠스플","mbc스포츠","sbs스포츠",
- "kbs n스포츠","jtbc골프","coupang play","쿠팡플레이",
- # US/UK/DE/FR broadcasters & major press (official-only, not personal channels)
- "bbc","itv","sky news","channel 4","channel 5","cnn","fox news","msnbc","nbc news",
- "abc news","cbs news","npr","the new york times","washington post","the guardian",
- "reuters","associated press","bloomberg","cnbc","nfl","nba","premier league",
- "ard","zdf","rtl","sat.1","pro7","prosieben","n-tv","ntv","der spiegel","bild",
- "tagesschau","zeit online","süddeutsche zeitung",
- "tf1","france 2","france 3","france info","franceinfo","bfmtv","le monde","le figaro",
- "libération","l'équipe","canal+","m6"]
-OFFICIAL_ARTIST={"i-dle (아이들)","babymonster","bangtantv","blackpink","le sserafim","illit","katseye","evan",
- "ive","aespa","newjeans","nmixx","twice","stray kids","seventeen","tomorrow x together","txt","엔믹스",
- "米津玄師","kenshi yonezu","kenshi yonezu  米津玄師","mazzel","m!lk","aぇ! group","aぇ!group","hey! say! jump",
- "hey!say!jump","snow man","king & prince","naniwa danshi","なにわ男子","travis japan","be:first","jo1","ini",
- "timelesz","ado","yoasobi","official髭男dism"," official髭男","janet jackson","超特急","be:first",
- "b'z","bz","ビーズ"}
-def is_official(title):
-    t=(title or "").lower().strip()
-    return any(x in t for x in OFFICIAL_ARTIST) or any(x in t for x in OFFICIAL_TOKENS)
+# ---- search: collect video ids per (region, topic) ----
+errors = []
+vid_meta = {}   # video_id -> (region, topic)
+for topic, regions in QUERIES.items():
+    for region, qs in regions.items():
+        for q in qs:
+            # medium(4~20분)만 검색 — 하루 100회인 search.list 할당량을 아끼기 위해
+            # long(20분초과) 검색은 생략(쇼츠는 자동 제외).
+            try:
+                d = http("https://www.googleapis.com/youtube/v3/search?" + urllib.parse.urlencode(
+                    {"part": "snippet", "type": "video", "order": "viewCount", "publishedAfter": AFTER,
+                     "regionCode": region, "relevanceLanguage": LANG[region], "q": q,
+                     "videoDuration": "medium", "maxResults": 50, "key": KEY}))
+            except Exception as e:
+                errors.append(f"{region}/{topic}/{q}: {e}")
+                print("search err", topic, region, q, e, file=sys.stderr); continue
+            for it in d.get("items", []):
+                vid_meta.setdefault(it["id"]["videoId"], (region, topic))
+print("search candidate videos:", len(vid_meta))
 
-# ---- structural official-MV detector: catches labels/artist channels not in the
-# hand-maintained lists above. Official music-video uploads are almost always titled
-# "<ArtistName><separator><SongTitle>" where <ArtistName> matches the channel's own
-# name (e.g. channel "Bz" -> title "B'z / 完全無欠"); personal cover/reaction channels
-# essentially never format titles this way. ----
-_ALNUM = re.compile(r"[^0-9a-z가-힣぀-ヿ゠-ヿ一-鿿]")
-def _norm(s):
-    return _ALNUM.sub("", (s or "").lower())
-def looks_like_official_mv(channel, title):
-    ch = _norm(channel)
-    if len(ch) < 2:
-        return False
-    head = re.split(r"[/\-|｜―–—]", title or "", maxsplit=1)[0]
-    return _norm(head) == ch
+# ---- fetch full stats ----
+ids = list(vid_meta)
+rows = []; n_live = 0; n_official = 0
+for i in range(0, len(ids), 50):
+    d = http("https://www.googleapis.com/youtube/v3/videos?" + urllib.parse.urlencode(
+        {"part": "snippet,statistics,contentDetails,liveStreamingDetails", "id": ",".join(ids[i:i+50]), "key": KEY}))
+    for it in d.get("items", []):
+        vid = it["id"]
+        region, topic = vid_meta[vid]
+        if "liveStreamingDetails" in it: n_live += 1; continue    # 라이브 제외
+        sn = it["snippet"]; st = it.get("statistics", {})
+        title = sn.get("title", "")
+        if not native(region, title): continue                    # 리전 언어 관련성
+        if is_official(sn.get("channelTitle", "")): n_official += 1; continue  # 공식/방송/언론 채널 제외
+        ds, dl = iso_dur(it.get("contentDetails", {}).get("duration", ""))
+        if ds <= 180 or "#shorts" in title.lower() or "#short" in title.lower(): continue  # 쇼츠 제외
+        views = int(st.get("viewCount", 0) or 0)
+        if views < MIN_VIEWS: continue
+        likes = int(st.get("likeCount", 0) or 0); comments = int(st.get("commentCount", 0) or 0)
+        hrs = hours_since(sn.get("publishedAt", ""))
+        issue = (views + 20*likes + 100*comments) / math.sqrt(hrs)
+        rows.append({"region": region, "topic": topic, "category_id": 0,
+            "video_id": vid, "url": f"https://www.youtube.com/watch?v={vid}", "title": title,
+            "channel": sn.get("channelTitle", ""), "published_at": sn.get("publishedAt", ""), "hours_since": round(hrs, 1),
+            "duration_sec": ds, "duration": dl, "views": views, "likes": likes, "comments": comments,
+            "views_per_hour": round(views/hrs), "issue_score": round(issue), "thumbnail": thumb(sn),
+            "description": (sn.get("description", "") or "")[:600], "is_live": False})
 
-# ---- title-based official-MV marker: catches label-owned channels whose name is the
-# COMPANY, not the artist (e.g. channel "KQ ENTERTAINMENT" uploading "ATEEZ - 'BAD'
-# Official MV") — the channel-name-match heuristic above misses these, but genuine
-# official uploads almost always spell out "Official MV/Music Video" in the title;
-# personal cover/reaction/fancam videos essentially never do. ----
-OFFICIAL_TITLE_MARKERS = ["official mv", "official music video", "official audio", "official video",
- "(mv)", "[mv]", "m/v)", "m/v]"]
-def has_official_title_marker(title):
-    t = (title or "").lower()
-    return any(x in t for x in OFFICIAL_TITLE_MARKERS)
-
-rows=[]; seen=set(); n_live=0; n_official=0
-for region in REGIONS:
-    for cat in CATS:
-        for it in fetch(region,cat):
-            vid=it["id"]
-            if (region,vid) in seen: continue
-            seen.add((region,vid))
-            sn=it["snippet"]; st=it.get("statistics",{})
-            is_live = "liveStreamingDetails" in it  # was/is a live broadcast (incl premieres)
-            if is_live: n_live+=1; continue
-            if cat in NATIVE_CATS and not native(region, sn.get("title","")): continue
-            if is_official(sn.get("channelTitle","")): n_official+=1; continue
-            if cat == 10 and (looks_like_official_mv(sn.get("channelTitle",""), sn.get("title",""))
-                              or has_official_title_marker(sn.get("title",""))):
-                n_official+=1; continue
-            views=int(st.get("viewCount",0) or 0); likes=int(st.get("likeCount",0) or 0); comments=int(st.get("commentCount",0) or 0)
-            hrs=hours_since(sn.get("publishedAt","")); ds,dl=iso_dur(it.get("contentDetails",{}).get("duration",""))
-            issue=(views+20*likes+100*comments)/math.sqrt(hrs)
-            rows.append({"region":region,"topic":classify(cat,sn.get("title","")),"category_id":cat,
-              "video_id":vid,"url":f"https://www.youtube.com/watch?v={vid}","title":sn.get("title",""),
-              "channel":sn.get("channelTitle",""),"published_at":sn.get("publishedAt",""),"hours_since":round(hrs,1),
-              "duration_sec":ds,"duration":dl,"views":views,"likes":likes,"comments":comments,
-              "views_per_hour":round(views/hrs),"issue_score":round(issue),"thumbnail":thumb(sn),
-              "description":(sn.get("description","") or "")[:600],"is_live":is_live})
-
-groups=defaultdict(list)
-for r in rows: groups[(r["region"],r["topic"])].append(r)
-top={}
-for k,lst in groups.items():
-    if k[1]=="기타": continue
-    lst.sort(key=lambda x:x["issue_score"],reverse=True)
-    top[f"{k[0]}|{k[1]}"]=lst[:3]
-json.dump(top,open(os.path.join(HERE,"top3_v2.json"),"w",encoding="utf-8"),ensure_ascii=False,indent=1)
-json.dump(rows,open(os.path.join(HERE,"candidates2.json"),"w",encoding="utf-8"),ensure_ascii=False,indent=1)
+groups = defaultdict(list)
+for r in rows: groups[(r["region"], r["topic"])].append(r)
+top = {}
+for k, lst in groups.items():
+    lst.sort(key=lambda x: x["issue_score"], reverse=True)
+    top[f"{k[0]}|{k[1]}"] = lst[:3]
+json.dump(top, open(os.path.join(HERE, "top3_v2.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+json.dump(rows, open(os.path.join(HERE, "candidates2.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
 print(f"personal non-live videos: {len(rows)} | excluded live: {n_live} | excluded official: {n_official}")
-ORDER=["경제","재테크","자기계발","연예","TV쇼","음악","게임","스포츠","IT·테크","라이프"]
+
+ORDER = list(QUERIES.keys())
 for region in REGIONS:
-    print("="*60,region)
+    print("="*60, region)
     for o in ORDER:
-        k=next((kk for kk in top if kk.startswith(region+"|") and kk.split("|")[1]==o),None)
-        lst=top.get(k,[])
+        lst = top.get(f"{region}|{o}", [])
         print(f"[{o}] {len(lst)}건")
-        for i,v in enumerate(lst,1):
+        for i, v in enumerate(lst, 1):
             print(f"  {i}. {v['channel']} [{v['duration']}] issue={v['issue_score']:,} :: {v['title'][:40]}")
 
 # if every API call failed (e.g. bad/quota-exceeded key), rows will be empty even

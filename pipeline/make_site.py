@@ -110,6 +110,8 @@ header.top{position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--s
 .metrics{display:flex;gap:6px;flex-wrap:wrap}
 .m{background:var(--chip);border-radius:8px;padding:4px 9px;font-size:11.5px;font-weight:700;color:var(--text)}
 .m small{color:var(--muted);font-weight:600}
+.m.mult{background:#fff3bf;color:#92400e}
+html[data-theme="dark"] .m.mult{background:#5c4813;color:#ffe08a}
 .posted{font-size:11.5px;color:var(--muted)}
 .hl{background:color-mix(in srgb,var(--accent2) 7%,transparent);border-left:3px solid var(--accent2);
   border-radius:0 10px 10px 0;padding:10px 12px;font-size:13px;font-weight:600;line-height:1.6;color:var(--text)}
@@ -176,11 +178,11 @@ html[data-theme="dark"] .rs.mult{background:#5c4813;color:#ffe08a}
 <div class="wrap">
   <section class="hero">
     <h2>오늘 가장 이슈된 영상, 한눈에</h2>
-    <p>한국·일본·미국·영국·독일·프랑스 유튜브 인기 피드를 10개 주제별로 모아 <b>개인 크리에이터 채널의 롱폼</b> 영상만 추렸습니다(<b>쇼츠·라이브·정치 제외</b>). 조회수·좋아요·댓글과 최근성을 가중한 <b>이슈점수</b> 순.</p>
+    <p>한국·일본·미국 유튜브를 <b>해외반응·스캔들·IT·돈·여행·갈등·e스포츠·연애·사회핫이슈·라이프·일본핫이슈</b> 11개 주제별로 모아 <b>개인 크리에이터 채널의 롱폼</b> 영상만 추렸습니다(<b>쇼츠·라이브 제외</b>). 조회수·좋아요·댓글과 최근성을 가중한 <b>이슈점수</b> 순.</p>
     <div class="stats">
       <div class="stat"><b>__N__</b><span>롱폼 영상</span></div>
       __STATS__
-      <div class="stat"><b>10</b><span>주제 카테고리</span></div>
+      <div class="stat"><b>11</b><span>주제 카테고리</span></div>
       <div class="stat"><b>🎬 __NDEEP__</b><span>/watch 심층분석</span></div>
     </div>
   </section>
@@ -203,9 +205,10 @@ html[data-theme="dark"] .rs.mult{background:#5c4813;color:#ffe08a}
       </div>
       <div class="search">🔍<input id="q" placeholder="제목·채널·내용 검색"></div>
       <select class="select" id="sort">
-        <option value="issue">이슈점수순</option>
+        <option value="vps">구독자대비조회수순</option>
         <option value="views">조회수순</option>
         <option value="recent">최신순</option>
+        <option value="issue">이슈점수순</option>
       </select>
     </div>
     <div class="row">
@@ -218,16 +221,16 @@ html[data-theme="dark"] .rs.mult{background:#5c4813;color:#ffe08a}
 </div>
 
 <footer class="ft"><div class="wrap">
-  <b>방법론</b> · YouTube Data API mostPopular(KR/JP/US/GB/DE/FR×카테고리) 수집 → 음반사·방송사·신문사·게임사·공식 아티스트 채널 제외 후 개인채널만 추출.
-  이슈점수 = (조회수 + 좋아요×20 + 댓글×100) ÷ √게시경과h. ※ API상 '24시간 조회 증가량'은 직접 제공되지 않아 누적 통계 기반 근사치.
+  <b>방법론</b> · YouTube Data API 검색(KR/JP/US×11개 주제, 국가별 현지어 검색어) 수집 → 음반사·방송사·신문사·게임사·공식 아티스트 채널 제외 후 개인채널만 추출.
+  순위는 <b>구독자대비조회수</b>(조회수÷구독자, 조회수 10만 미만 제외) 기준. 이슈점수(=(조회수+좋아요×20+댓글×100)÷√게시경과h)는 참고용으로만 병기.
   <b>분석</b> 배지가 ‘/watch 심층’인 카드는 영상 다운로드 후 프레임+자막으로 직접 분석. ⚠️ 표시는 자극·클릭베이트 우려로 교차확인 권장.
 </div></footer>
 
 <script>
 const DATA = __DATA__;
-const TOPICS = ["경제","재테크","자기계발","연예","TV쇼","음악","게임","스포츠","IT·테크","라이프"];
-const TCOLOR = {"경제":"#e8590c","재테크":"#f08c00","자기계발":"#2b8a3e","연예":"#2f9e44","TV쇼":"#1971c2","음악":"#9c36b5","게임":"#6741d9","스포츠":"#0ca678","IT·테크":"#1098ad","라이프":"#e8418c"};
-let state={country:"all",topic:"all",q:"",sort:"issue"};
+const TOPICS = ["해외반응","스캔들","IT","돈","여행","갈등","e스포츠","연애","사회핫이슈","라이프","일본핫이슈"];
+const TCOLOR = {"해외반응":"#1971c2","스캔들":"#9c36b5","IT":"#0c8599","돈":"#f08c00","여행":"#0ca678","갈등":"#e03131","e스포츠":"#4263eb","연애":"#e64980","사회핫이슈":"#e8590c","라이프":"#2f9e44","일본핫이슈":"#7048e8"};
+let state={country:"all",topic:"all",q:"",sort:"vps"};
 
 const fmt=n=>n>=10000?(n/10000).toFixed(n>=100000?0:1).replace(/\.0$/,'')+"만":n.toLocaleString();
 const esc=s=>(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -256,7 +259,8 @@ function render(){
     (state.q===""||(r.title+r.channel+r.summary+r.tip).toLowerCase().includes(state.q)));
   if(state.sort==="views")rows=[...rows].sort((a,b)=>b.views-a.views);
   else if(state.sort==="recent")rows=[...rows].sort((a,b)=>a.hours-b.hours);
-  else rows=[...rows].sort((a,b)=>b.issue-a.issue);
+  else if(state.sort==="issue")rows=[...rows].sort((a,b)=>b.issue-a.issue);
+  else rows=[...rows].sort((a,b)=>(b.views_per_sub??-1)-(a.views_per_sub??-1));
   document.getElementById("count").textContent=`${rows.length}개 영상`;
   const g=document.getElementById("grid");
   if(!rows.length){g.innerHTML='<div class="empty">조건에 맞는 영상이 없습니다.</div>';return;}
@@ -278,7 +282,8 @@ function render(){
           <span class="m">👁 ${fmt(r.views)}</span>
           <span class="m">👍 ${fmt(r.likes)}</span>
           <span class="m">💬 ${fmt(r.comments)}</span>
-          <span class="m">🔥 <small>이슈</small> ${fmt(r.issue)}</span>
+          ${r.subscribers!=null?`<span class="m">👤 ${fmt(r.subscribers)}</span>`:""}
+          ${r.views_per_sub!=null?`<span class="m mult">🚀 <small>구독대비</small> ${r.views_per_sub}배</span>`:""}
         </div>
         <div class="posted">게시 ${r.published} · ${r.hours}시간 전</div>
         <div class="hl">${sumBlock(r.summary)}</div>

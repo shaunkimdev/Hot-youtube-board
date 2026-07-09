@@ -8,6 +8,12 @@ pipeline/*.mp4
 pipeline/run.log
 pipeline/candidates*.json
 pipeline/longform_all.json
+pipeline/scratch/
+
+# XPost/cardnews media deliverables (large mp4/png, regenerable from the
+# dated xlsx + XPost.md / cardnews_design.md procedures — not pushed to git)
+영상클립_*/
+카드뉴스_*/
 
 # /watch working cache under site/assets (videos & frames are huge & regenerable;
 # the published dashboard is self-contained and does not reference these)

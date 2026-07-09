@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Replicate the /watch behavior with the Gemini API (for unattended CI).
 
-For SELECTED videos (country(KR/JP/US/GB/DE/FR) issue-score top5 across all topics +
+For SELECTED videos (country(KR/JP/US) issue-score top5 across all topics +
 all Rising Star): yt-dlp download -> ffmpeg frames + captions -> send frames+transcript
 to Gemini (multimodal) -> 100자 요약 + 시청자 도움 한 줄.   == what /watch does.
 For the rest: text-only summary from title+description+captions (cheap, no download).
@@ -15,7 +15,7 @@ Env: GEMINI_API_KEY (required — separate from the GOOGLE_API_KEY used for the
      GEMINI_MODEL (default gemini-3.1-flash-lite — cheapest current multimodal
      model, used for both the frame-based deep pass and the text-only pass),
      DEEP_MAX (safety cap on # of frame-based deep analyses, default 50 — headroom
-     above the structural max of 5×6 regions(KR/JP/US/GB/DE/FR)+5(rising)=35 so
+     above the structural max of 5×3 regions(KR/JP/US)+5(rising)=20 so
      nothing gets truncated).
 Deps: ffmpeg, yt-dlp (CLI), google-genai (pip).
 """
@@ -170,7 +170,7 @@ def main():
     rising = json.load(open(os.path.join(HERE, "rising2.json"), encoding="utf-8"))[:5]
     # DEEP set (/watch 심층분석 대상): 나라별 이슈점수 top5(전 주제 통합) + 모든 라이징스타
     deep_ids = set(v["video_id"] for v in rising)
-    for region in ("KR", "JP", "US", "GB", "DE", "FR"):
+    for region in ("KR", "JP", "US"):
         pool = [v for k, lst in top.items() if k.startswith(region + "|") for v in lst]
         pool.sort(key=lambda v: v.get("issue_score", 0), reverse=True)
         deep_ids.update(v["video_id"] for v in pool[:5])

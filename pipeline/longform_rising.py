@@ -44,35 +44,59 @@ def is_short(r):
 long_rows = [r for r in rows if not is_short(r)]
 print(f"pool {len(rows)} -> longform {len(long_rows)} (excluded shorts {len(rows)-len(long_rows)})")
 
+# ---- ranking metric: 구독자 대비 조회수 (views / subscribers) ----
+# A tiny channel with a handful of views can post a huge ratio (e.g. 50 views / 2 subs
+# = 25x) without the video actually being "an issue" to anyone. MIN_VIEWS_RANK is an
+# absolute view-count floor a video must clear before it's even eligible to be ranked
+# by that ratio, so the ratio only ever measures genuine breakout reach.
+# 10만(100k) views is the threshold commonly used in Korean digital-media/marketing
+# commentary as the point a video has "가시적인 화제성" (visible public buzz) rather
+# than niche-audience traction — consistent with this pipeline's own existing floors
+# (rising_search.py already requires >=50k, longform_rising's old rising gate >=200k).
+MIN_VIEWS_RANK = 100_000
+# MIN_LIKE_RATIO: spam/bot-view filter. Real breakout videos across every category we've
+# observed (economy talk shows, drama recaps, reaction content, travel vlogs) land at
+# 0.5%+ likes/views; content with view counts inflated by bots, ad networks, or pure
+# reposts/rips consistently shows <0.1% (e.g. an actual case: 129k views on 8 likes =
+# 0.006%). Below 0.1% the view count is not credible evidence of real audience reach,
+# so such videos are excluded from ranking entirely rather than just down-weighted.
+MIN_LIKE_RATIO = 0.001
+def rank_eligible(r):
+    return (r["views"] >= MIN_VIEWS_RANK and r.get("subscribers") is not None
+            and r["subscribers"] > 0
+            and r.get("likes", 0) / r["views"] >= MIN_LIKE_RATIO)
+for r in long_rows:
+    r["views_per_sub"] = round(r["views"] / r["subscribers"], 2) if rank_eligible(r) else None
+
 json.dump(long_rows, open(os.path.join(HERE,"longform_all.json"),"w",encoding="utf-8"), ensure_ascii=False, indent=1)
 
-# ---- longform top3 per (region, topic) ----
+# ---- longform top3 per (region, topic), ranked by 구독자대비조회수 (views_per_sub) ----
 groups = defaultdict(list)
 for r in long_rows:
-    if r["topic"] != "기타": groups[(r["region"], r["topic"])].append(r)
+    if r["topic"] != "기타" and rank_eligible(r): groups[(r["region"], r["topic"])].append(r)
 top = {}
 for k, lst in groups.items():
-    lst.sort(key=lambda x: x["issue_score"], reverse=True)
+    lst.sort(key=lambda x: x["views_per_sub"], reverse=True)
     top[f"{k[0]}|{k[1]}"] = lst[:3]
 json.dump(top, open(os.path.join(HERE,"top3_v3.json"),"w",encoding="utf-8"), ensure_ascii=False, indent=1)
 
-# ---- Rising Star: from LONGFORM pool only (쇼츠 제외) ----
+# ---- Rising Star: from LONGFORM pool only (쇼츠 제외), ranked by 구독자대비조회수 ----
 RISE_MIN_VIEWS = 200000
 cand = [r for r in long_rows if r["subscribers"] is not None and 0 < r["subscribers"] <= 10000
         and r["views"] >= RISE_MIN_VIEWS]
-cand.sort(key=lambda x: x["views"], reverse=True)
+for r in cand: r["views_per_sub"] = round(r["views"]/max(r["subscribers"],1), 2)
+cand.sort(key=lambda x: x["views_per_sub"], reverse=True)
 seen_ch, rising = set(), []
 for r in cand:
     if r["channel_id"] in seen_ch: continue
     seen_ch.add(r["channel_id"])
-    r2 = dict(r); r2["views_per_sub"] = round(r["views"]/max(r["subscribers"],1))
-    rising.append(r2)
+    rising.append(dict(r))
     if len(rising) >= 5: break
 json.dump(rising, open(os.path.join(HERE,"rising.json"),"w",encoding="utf-8"), ensure_ascii=False, indent=1)
 
 # ---- report ----
-ORDER=["경제","재테크","자기계발","연예","TV쇼","음악","게임","스포츠","IT·테크","라이프"]
-for region in ["KR","JP","US","GB","DE","FR"]:
+ORDER=["해외반응","스캔들","IT","돈","여행","갈등","e스포츠","연애","사회핫이슈","라이프","일본핫이슈"]
+for region in ["KR","JP","US"]:
     print("="*60, region)
     for o in ORDER:
         k=next((kk for kk in top if kk.startswith(region+"|") and kk.split("|")[1]==o),None)
@@ -80,7 +104,7 @@ for region in ["KR","JP","US","GB","DE","FR"]:
         print(f"[{o}] {len(lst)}건", end="  ")
         for v in lst:
             s=v["subscribers"]; ss=f"{s:,}" if s is not None else "비공개"
-            print(f"| {v['channel']}[{v['duration']}]구독{ss}", end="")
+            print(f"| {v['channel']}[{v['duration']}]구독{ss}(조회/구독 {v['views_per_sub']}배)", end="")
         print()
 print("\n"+"="*60, "RISING STAR Best5 (구독≤1만, 조회수≥20만, 채널중복제거)")
 for i,v in enumerate(rising,1):

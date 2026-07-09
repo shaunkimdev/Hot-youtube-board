@@ -9,14 +9,17 @@ after = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=
 def http(url):
     with urllib.request.urlopen(url, timeout=30) as r: return json.load(r)
 
-# broad seed queries per region to surface recent viral videos across topics
-SEED = {"KR": ["뉴스","이슈","논란","경기","리뷰","게임","음악","꿀팁","브이로그","속보"],
-        "JP": ["ニュース","話題","炎上","試合","レビュー","ゲーム","音楽","裏技","検証","速報"],
-        "US": ["news","controversy","game highlights","review","music","life hack","vlog","breaking news"],
-        "GB": ["news","controversy","match highlights","review","music","life hack","vlog","breaking news"],
-        "DE": ["nachrichten","kontroverse","highlights","rezension","musik","lifehacks","vlog","eilmeldung"],
-        "FR": ["actualités","polémique","highlights","critique","musique","astuces","vlog","dernière minute"]}
-LANG = {"KR": "ko", "JP": "ja", "US": "en", "GB": "en", "DE": "de", "FR": "fr"}
+# broad seed queries per region to surface recent viral videos across topics.
+# Region scope limited to KR/JP/US (not the earlier +GB/DE/FR) and trimmed to 4
+# seeds/region: search.list costs 100 units/call and the default YouTube Data API
+# quota caps it at ~100 calls/day *for the whole project*, shared with discover2.py
+# (which now needs 64 of those 100 for its own 11-category collection). 3 regions x
+# 4 seeds x 2 durations(medium+long) = 24 calls, keeping the combined daily total
+# (64+24=88) under the shared cap.
+SEED = {"KR": ["뉴스","이슈","논란","브이로그"],
+        "JP": ["海外の反応","炎上","旅行 トラブル","ニュース"],
+        "US": ["news","controversy","viral","vlog"]}
+LANG = {"KR": "ko", "JP": "ja", "US": "en"}
 
 vid_region = {}
 for region, seeds in SEED.items():
@@ -63,7 +66,7 @@ def native(region, t):
         return any(0xAC00<=ord(ch)<=0xD7A3 or 0x1100<=ord(ch)<=0x11FF or 0x3130<=ord(ch)<=0x318F for ch in t)
     if region=="JP":
         return any(0x3040<=ord(ch)<=0x309F or 0x30A0<=ord(ch)<=0x30FF for ch in t)
-    if region in ("US","GB","DE","FR"):
+    if region == "US":
         FOREIGN = ((0xAC00,0xD7A3),(0x1100,0x11FF),(0x3130,0x318F),(0x3040,0x30FF),
                    (0x4E00,0x9FFF),(0x0600,0x06FF),(0x0400,0x04FF),(0x0E00,0x0E7F),
                    (0x0590,0x05FF),(0x0370,0x03FF),(0x0900,0x097F),(0x0980,0x09FF),
@@ -72,6 +75,7 @@ def native(region, t):
         return not any(any(lo<=ord(ch)<=hi for lo,hi in FOREIGN) for ch in t)
     return False
 
+MIN_LIKE_RATIO = 0.001  # 0.1% — same bot/spam-view gate as longform_rising.py
 cand = []
 for vid, it in meta.items():
     if "liveStreamingDetails" in it: continue  # exclude live
@@ -79,6 +83,8 @@ for vid, it in meta.items():
     if s is None or not (0 < s <= 10000): continue
     st = it["statistics"]; views = int(st.get("viewCount",0) or 0)
     if views < 50000: continue   # 롱폼은 조회수가 낮으므로 기준 완화(5만)
+    likes = int(st.get("likeCount",0) or 0)
+    if likes / views < MIN_LIKE_RATIO: continue  # 좋아요 비율 0.1% 미만은 봇/스팸 조회수 의심
     region = vid_region.get(vid,"?")
     if not native(region, it["snippet"]["title"]): continue  # KR/JP relevance only
     ds, dl = dur(it.get("contentDetails",{}).get("duration",""))
@@ -88,13 +94,13 @@ for vid, it in meta.items():
     cand.append({"region":vid_region.get(vid,"?"),"video_id":vid,"url":f"https://www.youtube.com/watch?v={vid}",
         "title":it["snippet"]["title"],"channel":it["snippet"]["channelTitle"],"channel_id":cid,
         "published_at":it["snippet"]["publishedAt"],"duration_sec":ds,"duration":dl,
-        "views":views,"likes":int(st.get("likeCount",0) or 0),"comments":int(st.get("commentCount",0) or 0),
+        "views":views,"likes":likes,"comments":int(st.get("commentCount",0) or 0),
         "subscribers":s,"views_per_sub":round(views/max(s,1)),"thumbnail":thumb,
         "is_short": ds<=180 or "#shorts" in it["snippet"]["title"].lower(),
         "description":(it["snippet"].get("description","") or "")[:400]})
 
-# dedupe by channel, rank by views desc, take best 8 (we'll pick 5 + spare)
-cand.sort(key=lambda x: x["views"], reverse=True)
+# dedupe by channel, rank by 구독자대비조회수(views_per_sub) desc, take best 8 (we'll pick 5 + spare)
+cand.sort(key=lambda x: x["views_per_sub"], reverse=True)
 seen, best = set(), []
 for r in cand:
     if r["channel_id"] in seen: continue

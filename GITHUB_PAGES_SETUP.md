@@ -12,7 +12,7 @@
 .github/workflows/daily.yml   ← 매일 KST 08:00 클라우드에서 실행
 requirements.txt              ← yt-dlp, xlsxwriter, google-genai
 pipeline/run_daily.py
-   ├ discover2.py        트렌딩 수집 + 라이브/공식/해외/쇼츠 제외
+   ├ discover2.py        Search API로 11개 고정 주제 x 3개국(KR/JP/US) 수집 + 라이브/공식/쇼츠 제외
    ├ longform_rising.py  롱폼 필터 + 구독자수 조회
    ├ rising_search.py    라이징스타 Best5
    ├ summarize_llm.py    ★Gemini API로 요약 (상위+라이징=프레임 deep, 나머지=텍스트)

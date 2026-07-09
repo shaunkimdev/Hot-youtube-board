@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """Daily pipeline orchestrator.
-Runs: discover2        (collect mostPopular, exclude live/official/foreign/정치)
-   -> discover_topics  (재테크·자기계발 via Search API, append to candidates)
+Runs: discover2        (Search API, 11개 고정 주제 x 6개국 수집, 라이브/공식채널 제외)
    -> longform_rising  (longform filter + subscriber lookup)
    -> rising_search    (Rising Star Best5 via Search API, 쇼츠 제외)
    -> build_auto       (data.json + Excel + self-contained website)
@@ -27,7 +26,7 @@ def main():
     if not os.environ.get("GOOGLE_API_KEY"):
         log("ERROR: GOOGLE_API_KEY not set."); return 1
     env = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
-    steps = ["discover2.py", "discover_topics.py", "longform_rising.py", "rising_search.py"]
+    steps = ["discover2.py", "longform_rising.py", "rising_search.py"]
     if os.environ.get("GEMINI_API_KEY"):
         steps.append("summarize_llm.py")   # Gemini API summaries (/watch behavior)
     else:

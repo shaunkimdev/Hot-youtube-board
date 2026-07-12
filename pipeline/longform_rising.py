@@ -27,15 +27,22 @@ for i in range(0, len(ids), 50):
     for it in d.get("items", []):
         vid2ch[it["id"]] = it["snippet"]["channelId"]
 chans = sorted(set(vid2ch.values()))
-ch_subs = {}
+ch_subs = {}; ch_country = {}
 for i in range(0, len(chans), 50):
     d = http("https://www.googleapis.com/youtube/v3/channels?"+urllib.parse.urlencode(
-        {"part":"statistics","id":",".join(chans[i:i+50]),"key":KEY}))
+        {"part":"statistics,snippet","id":",".join(chans[i:i+50]),"key":KEY}))
     for it in d.get("items", []):
         st = it.get("statistics", {})
         ch_subs[it["id"]] = None if st.get("hiddenSubscriberCount", False) else int(st.get("subscriberCount", 0) or 0)
+        ch_country[it["id"]] = it.get("snippet", {}).get("country")
 for r in rows:
     cid = vid2ch.get(r["video_id"]); r["channel_id"] = cid; r["subscribers"] = ch_subs.get(cid)
+    r["channel_country"] = ch_country.get(cid)
+
+# 특별 카테고리는 해외 제작 영상만 허용한다. 국가를 공개하지 않은 채널은 검색 리전/언어를
+# 근거로 후보에 남기되, KR/JP로 명시된 채널은 확실히 제외한다.
+rows = [r for r in rows if not (r.get("topic") == "한일글로벌"
+                                and r.get("channel_country") in {"KR", "JP"})]
 
 # ---- longform filter (for MAIN topic categories) ----
 def is_short(r):
@@ -73,10 +80,16 @@ json.dump(long_rows, open(os.path.join(HERE,"longform_all.json"),"w",encoding="u
 # ---- longform top3 per (region, topic), ranked by 구독자대비조회수 (views_per_sub) ----
 groups = defaultdict(list)
 for r in long_rows:
-    if r["topic"] != "기타" and rank_eligible(r): groups[(r["region"], r["topic"])].append(r)
+    special_ok = (r.get("topic") == "한일글로벌" and r["views"] >= 20_000
+                  and r.get("likes", 0) / max(r["views"], 1) >= MIN_LIKE_RATIO)
+    if r["topic"] != "기타" and (rank_eligible(r) or special_ok):
+        groups[(r["region"], r["topic"])].append(r)
 top = {}
 for k, lst in groups.items():
-    lst.sort(key=lambda x: x["views_per_sub"], reverse=True)
+    # 한일글로벌은 XPost용 특별 카테고리이므로 요청대로 화제성 점수 Top3를 고정한다.
+    # 일반 카테고리는 기존 카드뉴스 기준(구독자 대비 조회수)을 유지한다.
+    metric = "issue_score" if k[1] == "한일글로벌" else "views_per_sub"
+    lst.sort(key=lambda x: x.get(metric) or 0, reverse=True)
     top[f"{k[0]}|{k[1]}"] = lst[:3]
 json.dump(top, open(os.path.join(HERE,"top3_v3.json"),"w",encoding="utf-8"), ensure_ascii=False, indent=1)
 
@@ -95,7 +108,7 @@ for r in cand:
 json.dump(rising, open(os.path.join(HERE,"rising.json"),"w",encoding="utf-8"), ensure_ascii=False, indent=1)
 
 # ---- report ----
-ORDER=["해외반응","스캔들","IT","돈","여행","갈등","e스포츠","연애","사회핫이슈","라이프","일본핫이슈"]
+ORDER=["해외반응","스캔들","IT","돈","여행","갈등","e스포츠","연애","사회핫이슈","라이프","일본핫이슈","한일글로벌"]
 for region in ["KR","JP","US"]:
     print("="*60, region)
     for o in ORDER:

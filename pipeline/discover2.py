@@ -1,20 +1,23 @@
 # -*- coding: utf-8 -*-
-"""Search-API discovery across 11 FIXED thematic categories, per region
+"""Search-API discovery across 12 FIXED thematic categories, per region
 (KR/JP/US only). Personal channels only; LIVE 제외; 롱폼만(4~20분, 쇼츠 제외).
 
-These 11 categories (해외반응/스캔들/IT/돈/여행/갈등/e스포츠/연애/사회핫이슈/라이프/
-일본핫이슈) don't map onto YouTube's own videoCategoryId taxonomy, so — unlike the
+These 12 categories (해외반응/스캔들/IT/돈/여행/갈등/e스포츠/연애/사회핫이슈/라이프/
+일본핫이슈/한일글로벌) don't map onto YouTube's own videoCategoryId taxonomy, so — unlike the
 old mostPopular-chart approach — collection here is 100% Search-API query based.
 
 Quota note: search.list costs 100 units/call and the default YouTube Data API
 quota caps search.list at ~100 calls/day *for the whole project* (shared with
 rising_search.py). Region scope is intentionally limited to KR/JP/US (not the
 earlier KR/JP/US/GB/DE/FR) and each (category, region) gets exactly 2 seed
-queries x 1 duration(medium) = 10*3*2 + 일본핫이슈(2 regions)*2 = 64 calls here,
+queries x 1 duration(medium) = 10*3*2 + 일본핫이슈(2 regions)*2 + 한일글로벌(US 4) = 68 calls here,
 leaving headroom for rising_search.py's ~24 calls within the shared 100/day cap.
 
 일본핫이슈 = 해외(자국 밖)에서 일본을 다루는 영상(문화·여행·이슈) -> JP 리전은 제외
-(자국 이야기는 '해외 시선'이 아니므로)."""
+(자국 이야기는 '해외 시선'이 아니므로).
+
+한일글로벌 = 해외 영어권 채널이 한국·일본 또는 한일 양국을 다룬 영상. 이 특별 카테고리는
+US 검색만 사용하며, 후속 단계에서 채널 국가가 KR/JP로 명시된 채널은 제외한다."""
 import os, json, math, re, urllib.request, urllib.parse, datetime, sys, io
 from collections import defaultdict
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
@@ -81,7 +84,24 @@ QUERIES = {
    "KR": ["일본 여행 근황", "일본 이슈"],
    "US": ["japan news", "japan travel vlog"],
  },
+ "한일글로벌": {
+   "US": ["South Korea reaction travel culture", "Japan reaction travel culture",
+          "South Korea Japan relations", "Korea vs Japan comparison"],
+ },
 }
+
+SPECIAL_TOPIC = "한일글로벌"
+KOREA_TERMS = ("korea", "korean", "seoul", "busan", "k-pop", "kpop", "bts", "hallyu")
+JAPAN_TERMS = ("japan", "japanese", "tokyo", "osaka", "kyoto", "anime", "j-pop", "jpop")
+
+def special_focus(title, description):
+    text = f"{title} {description}".lower()
+    kr = any(term in text for term in KOREA_TERMS)
+    jp = any(term in text for term in JAPAN_TERMS)
+    if kr and jp: return "한일관련"
+    if kr: return "한국관련"
+    if jp: return "일본관련"
+    return None
 
 # ---- official/broadcaster/label/press/league blocklist (personal channels only) ----
 OFFICIAL_TOKENS = ["- topic", " topic", "vevo", "smtown", "hybe", "belift", "bighit", "big hit", "source music",
@@ -180,6 +200,8 @@ for i in range(0, len(ids), 50):
         sn = it["snippet"]; st = it.get("statistics", {})
         title = sn.get("title", "")
         if not native(region, title): continue                    # 리전 언어 관련성
+        focus = special_focus(title, sn.get("description", "")) if topic == SPECIAL_TOPIC else None
+        if topic == SPECIAL_TOPIC and not focus: continue         # 실제 한일 관련성이 없는 검색 노이즈 제외
         if is_official(sn.get("channelTitle", "")): n_official += 1; continue  # 공식/방송/언론 채널 제외
         ds, dl = iso_dur(it.get("contentDetails", {}).get("duration", ""))
         if ds <= 180 or "#shorts" in title.lower() or "#short" in title.lower(): continue  # 쇼츠 제외
@@ -193,7 +215,8 @@ for i in range(0, len(ids), 50):
             "channel": sn.get("channelTitle", ""), "published_at": sn.get("publishedAt", ""), "hours_since": round(hrs, 1),
             "duration_sec": ds, "duration": dl, "views": views, "likes": likes, "comments": comments,
             "views_per_hour": round(views/hrs), "issue_score": round(issue), "thumbnail": thumb(sn),
-            "description": (sn.get("description", "") or "")[:600], "is_live": False})
+            "description": (sn.get("description", "") or "")[:600], "is_live": False,
+            "special_focus": focus})
 
 groups = defaultdict(list)
 for r in rows: groups[(r["region"], r["topic"])].append(r)

@@ -29,7 +29,7 @@
 `pipeline/` 폴더:
 ```
 run_daily.py        # 오케스트레이터 (이걸 스케줄에 등록)
- ├─ discover2.py        # Search API로 11개 고정 주제(해외반응·스캔들·IT·돈·여행·갈등·e스포츠·연애·사회핫이슈·라이프·일본핫이슈) x 3개국(KR/JP/US) 수집 + 라이브/공식 채널 제외
+ ├─ discover2.py        # Search API로 12개 고정 주제(기존 11개 + 특별 카테고리 한일글로벌) x KR/JP/US 수집 + 라이브/공식 채널 제외
  ├─ longform_rising.py  # 롱폼(>180초) 필터 + 채널 구독자수 조회
  ├─ rising_search.py    # 라이징스타 Best5 (검색 API)
  └─ build_auto.py       # data.json + 엑셀 + 자체완결 index.html (+ archive/ 날짜별 보관)

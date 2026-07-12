@@ -18,7 +18,7 @@ SUMMARIES = {}
 _sp = os.path.join(HERE, "summaries.json")
 if os.path.exists(_sp):
     SUMMARIES = json.load(open(_sp, encoding="utf-8"))
-ORDER = ["해외반응", "스캔들", "IT", "돈", "여행", "갈등", "e스포츠", "연애", "사회핫이슈", "라이프", "일본핫이슈"]
+ORDER = ["해외반응", "스캔들", "IT", "돈", "여행", "갈등", "e스포츠", "연애", "사회핫이슈", "라이프", "일본핫이슈", "한일글로벌"]
 
 def _has_hangul(s):
     return any(0xAC00 <= ord(ch) <= 0xD7A3 for ch in s)
@@ -62,7 +62,8 @@ def base(v, region):
         "likes": v.get("likes", 0), "comments": v.get("comments", 0), "issue": v.get("issue_score", 0),
         "subscribers": v.get("subscribers"), "views_per_sub": v.get("views_per_sub"),
         "summary": en[0], "tip": en[1], "article_title": en[2], "article_url": en[3],
-        "url": v["url"], "thumb": v["thumbnail"], "analysis": en[4], "timeline": timeline}
+        "url": v["url"], "thumb": v["thumbnail"], "analysis": en[4], "timeline": timeline,
+        "special_focus": v.get("special_focus"), "channel_country": v.get("channel_country")}
 
 RISE_GENRE = {"GxS8Val7Gs4": "스포츠", "1L2FHEMSY_0": "연예", "hvsrOgrqzM4": "경제", "V_FvHTM9krs": "연예", "SYEChi_5gXU": "음악"}
 rows = []
@@ -104,7 +105,7 @@ def tl_text(d):
         return "⏱ 타임라인\n" + "\n".join(f"· {t[0]}  {t[1]}" for t in d["timeline"])
     return d["tip"]
 COLS = ["날짜","국가","주제","순위","제목","채널","게시일","길이","조회수","좋아요","댓글","이슈점수",
-        "구독자","구독자대비조회수","상세요약","도움내용/⏱타임라인","영상링크","분석방식"]
+        "구독자","구독자대비조회수","상세요약","도움내용/⏱타임라인","영상링크","분석방식","특별분류"]
 for name, data in [("전체", rows), ("라이징스타", rising)]:
     ws = wb.add_worksheet(name)
     for c, h in enumerate(COLS): ws.write(0, c, h, hd)
@@ -117,6 +118,7 @@ for name, data in [("전체", rows), ("라이징스타", rising)]:
         if vps is None: ws.write(i, 13, "-", cc_)
         else: ws.write_number(i, 13, vps, rt)
         ws.write(i, 14, d["summary"], cl); ws.write(i, 15, tl_text(d), cl); ws.write_url(i, 16, d["url"], cc_, "▶"); ws.write(i, 17, d["analysis"], cc_)
+        ws.write(i, 18, d.get("special_focus") or "", cc_)
 wb.close()
 
 # regenerate self-contained site

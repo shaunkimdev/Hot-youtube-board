@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Daily pipeline orchestrator.
-Runs: discover2        (Search API, 11개 고정 주제 x 6개국 수집, 라이브/공식채널 제외)
+Runs: discover2        (Search API, 12개 고정 주제 x KR/JP/US 수집, 라이브/공식채널 제외)
    -> longform_rising  (longform filter + subscriber lookup)
    -> rising_search    (Rising Star Best5 via Search API, 쇼츠 제외)
    -> build_auto       (data.json + Excel + self-contained website)

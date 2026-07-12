@@ -20,6 +20,7 @@ Env: GEMINI_API_KEY (required — separate from the GOOGLE_API_KEY used for the
 Deps: ffmpeg, yt-dlp (CLI), google-genai (pip).
 """
 import os, re, json, glob, subprocess, tempfile, sys, io
+from watch_runtime import run_watch, update_analysis
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -147,15 +148,16 @@ def summarize(v, deep):
     desc = " ".join((v.get("description") or "").split())
     dur = v.get("duration_sec", 0)
     if deep:
-        with tempfile.TemporaryDirectory() as td:
-            mp4 = os.path.join(td, "v.mp4")
-            transcript = fetch_captions(v["url"], td)
-            frames = []
-            if download(v["url"], mp4):
-                frames = extract_frames(mp4, 12, os.path.join(td, "fr"))
+        try:
+            watched = run_watch(v, max_frames=12)
+            frames = [f["path"] for f in watched.get("frames", []) if os.path.exists(f["path"])]
+            transcript = watched.get("transcript", "")
             r = call_gemini(title, channel, transcript or desc, frames, dur)
             if r:
+                update_analysis(v["video_id"], r[0], r[1], r[2])
                 return r[0], r[1], (WATCH if frames else META), r[2]
+        except Exception as e:
+            print(f"watch adapter failed for {v['video_id']}: {e}", file=sys.stderr)
     # text-only
     r = call_gemini(title, channel, desc, None, dur)
     if r:

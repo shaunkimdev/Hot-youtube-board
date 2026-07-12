@@ -2,7 +2,7 @@
 
 ## 결론 먼저
 - **내 컴퓨터가 꺼져 있어도 됩니다.** GitHub Actions는 GitHub의 클라우드 서버(우분투)에서 cron으로 실행됩니다. 내 PC와 무관.
-- **Gemini API로 `/watch` 동작을 자동 재현합니다.** `/watch`는 원래 Claude Code의 플러그인(슬래시 명령)이지만, 무인 CI에서는 그 동작(영상 다운로드 → 프레임 추출 → 자막 → 멀티모달 요약)을 **Gemini API**(`google-genai`)로 그대로 재현합니다 → `pipeline/summarize_llm.py`. 결과 품질은 `/watch`와 사실상 동일하며, 비용은 훨씬 저렴합니다(모델: `gemini-3.1-flash-lite`).
+- **설치된 `watch` 스킬을 공통 영상 처리 엔진으로 사용합니다.** `watch`가 영상 다운로드·장면 프레임·자막을 `site/assets/<video_id>/watch.json`과 함께 만들고, Gemini가 그 산출물을 분석합니다. 카드뉴스는 대표 watch 프레임을, XPost는 watch 타임라인의 하이라이트 시작점을 재사용합니다.
 - (참고) 진짜 `/watch` 슬래시 명령을 그대로 쓰려면 `anthropics/claude-code-base-action`으로 Claude Code를 헤드리스(`claude -p`) 실행하고 claude-video 플러그인을 설치하는 방법도 있지만, 다중 영상 루프엔 위 API 재현 방식이 더 적합합니다.
 
 ---

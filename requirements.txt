@@ -1,3 +1,7 @@
 yt-dlp
 xlsxwriter
 google-genai
+deep-translator
+youtube-transcript-api
+Pillow
+fonttools

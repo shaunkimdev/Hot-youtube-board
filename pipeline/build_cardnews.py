@@ -7,18 +7,20 @@ import os
 import re
 import sys
 import io
+import datetime
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from cardnews_gen import make_cover, make_body
 from cardnews_caption import save_caption
+from watch_runtime import load_watch
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PROJ = os.path.dirname(HERE)
 SCRATCH = os.path.join(HERE, "scratch")
 THUMBS = os.path.join(HERE, "thumbs")
-DATE = "2026-07-09"
-DATE_DOT = "2026.07.09"
+DATE = os.environ.get("RUN_DATE") or datetime.date.today().isoformat()
+DATE_DOT = DATE.replace("-", ".")
 
 COUNTRY_CODE = {"한국": "KR", "일본": "JP", "미국": "US"}
 OUT_ROOT = os.path.join(PROJ, f"카드뉴스_{DATE}")
@@ -45,6 +47,23 @@ def load(country):
 def build_country(country):
     code = COUNTRY_CODE[country]
     top3, rising = load(country)
+    # watch_runtime stores its representative analyzed frame in THUMBS using
+    # the video id. cardnews_gen checks that cache before fetching YouTube's
+    # promotional thumbnail, so cards and analysis share the same visual.
+    frame_overrides = {
+        "ZcXMi--AOjk": "frame_0115.jpg",
+        "Y6VWPBmr1bg": "frame_0378.jpg",
+    }
+    for item in top3 + ([rising] if rising else []):
+        video_id = vid(item["링크"])
+        watched = load_watch(video_id)
+        if watched and watched.get("frames"):
+            selected = next((f for f in watched["frames"] if os.path.basename(f.get("path", "")) == frame_overrides.get(video_id)), None)
+            frame = (selected or watched["frames"][len(watched["frames"]) // 2]).get("path")
+            if frame and os.path.exists(frame):
+                import shutil
+                os.makedirs(THUMBS, exist_ok=True)
+                shutil.copyfile(frame, os.path.join(THUMBS, f"{video_id}.jpg"))
     page_total = 5 if rising else 4
     out_dir = os.path.join(OUT_ROOT, country)
     os.makedirs(out_dir, exist_ok=True)
@@ -71,7 +90,7 @@ def build_country(country):
 
     if rising:
         out_name = f"{page_total:02d}_라이징_{safe(rising['채널'])}.png"
-        rising_desc = rising["소개"] + f" 지금 급상승 중인 신흥 채널로, 구독자 대비 {rising['구독자대비조회수']} 터졌습니다. 팔로우·저장 ✅"
+        rising_desc = rising["소개"] + " 지금 급상승 중! 팔로우·저장 ✅"
         make_body(
             vid(rising["링크"]), THUMBS,
             os.path.join(out_dir, out_name),

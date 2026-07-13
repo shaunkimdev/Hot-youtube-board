@@ -4,9 +4,11 @@ hand-authored EN3 dict (so unattended daily runs always produce output).
 Outputs dated + 'latest' data.json, Excel, and self-contained index.html."""
 import json, os, re, urllib.request, datetime, subprocess, sys
 import xlsxwriter
+HERE = os.path.dirname(os.path.abspath(__file__))
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
 from enrich3 import EN3, WATCH, META, TIMELINE
 
-HERE = os.path.dirname(os.path.abspath(__file__))
 PROJ = os.path.dirname(HERE)
 SITE = os.path.join(PROJ, "site"); os.makedirs(SITE, exist_ok=True)
 DATE = os.environ.get("RUN_DATE") or datetime.date.today().isoformat()
@@ -18,7 +20,7 @@ SUMMARIES = {}
 _sp = os.path.join(HERE, "summaries.json")
 if os.path.exists(_sp):
     SUMMARIES = json.load(open(_sp, encoding="utf-8"))
-ORDER = ["해외반응", "스캔들", "IT", "돈", "여행", "갈등", "e스포츠", "연애", "사회핫이슈", "라이프", "일본핫이슈"]
+ORDER = ["핫이슈", "사건사고"]
 
 def _has_hangul(s):
     return any(0xAC00 <= ord(ch) <= 0xD7A3 for ch in s)

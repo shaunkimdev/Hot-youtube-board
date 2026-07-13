@@ -178,11 +178,11 @@ html[data-theme="dark"] .rs.mult{background:#5c4813;color:#ffe08a}
 <div class="wrap">
   <section class="hero">
     <h2>오늘 가장 이슈된 영상, 한눈에</h2>
-    <p>한국·일본·미국 유튜브를 <b>해외반응·스캔들·IT·돈·여행·갈등·e스포츠·연애·사회핫이슈·라이프·일본핫이슈</b> 11개 주제별로 모아 <b>개인 크리에이터 채널의 롱폼</b> 영상만 추렸습니다(<b>쇼츠·라이브 제외</b>). 조회수·좋아요·댓글과 최근성을 가중한 <b>이슈점수</b> 순.</p>
+    <p>한국·일본·미국 유튜브를 <b>핫이슈·사건사고</b> 두 카테고리로 모아 <b>개인 크리에이터 채널의 롱폼</b> 영상만 추렸습니다(<b>쇼츠·라이브 제외</b>). 조회수·좋아요·댓글과 최근성을 가중한 <b>이슈점수</b> 순.</p>
     <div class="stats">
       <div class="stat"><b>__N__</b><span>롱폼 영상</span></div>
       __STATS__
-      <div class="stat"><b>11</b><span>주제 카테고리</span></div>
+      <div class="stat"><b>2</b><span>주제 카테고리</span></div>
       <div class="stat"><b>🎬 __NDEEP__</b><span>/watch 심층분석</span></div>
     </div>
   </section>
@@ -221,15 +221,15 @@ html[data-theme="dark"] .rs.mult{background:#5c4813;color:#ffe08a}
 </div>
 
 <footer class="ft"><div class="wrap">
-  <b>방법론</b> · YouTube Data API 검색(KR/JP/US×11개 주제, 국가별 현지어 검색어) 수집 → 음반사·방송사·신문사·게임사·공식 아티스트 채널 제외 후 개인채널만 추출.
+  <b>방법론</b> · YouTube Data API 검색(KR/JP/US×핫이슈·사건사고, 국가별 현지어 검색어) 수집 → 음반사·방송사·신문사·게임사·공식 아티스트 채널 제외 후 개인채널만 추출.
   순위는 <b>구독자대비조회수</b>(조회수÷구독자, 조회수 10만 미만 제외) 기준. 이슈점수(=(조회수+좋아요×20+댓글×100)÷√게시경과h)는 참고용으로만 병기.
   <b>분석</b> 배지가 ‘/watch 심층’인 카드는 영상 다운로드 후 프레임+자막으로 직접 분석. ⚠️ 표시는 자극·클릭베이트 우려로 교차확인 권장.
 </div></footer>
 
 <script>
 const DATA = __DATA__;
-const TOPICS = ["해외반응","스캔들","IT","돈","여행","갈등","e스포츠","연애","사회핫이슈","라이프","일본핫이슈"];
-const TCOLOR = {"해외반응":"#1971c2","스캔들":"#9c36b5","IT":"#0c8599","돈":"#f08c00","여행":"#0ca678","갈등":"#e03131","e스포츠":"#4263eb","연애":"#e64980","사회핫이슈":"#e8590c","라이프":"#2f9e44","일본핫이슈":"#7048e8"};
+const TOPICS = ["핫이슈","사건사고"];
+const TCOLOR = {"핫이슈":"#4263eb","사건사고":"#e03131"};
 let state={country:"all",topic:"all",q:"",sort:"vps"};
 
 const fmt=n=>n>=10000?(n/10000).toFixed(n>=100000?0:1).replace(/\.0$/,'')+"만":n.toLocaleString();

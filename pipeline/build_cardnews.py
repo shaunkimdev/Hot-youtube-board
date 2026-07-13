@@ -1,153 +1,126 @@
 # -*- coding: utf-8 -*-
-"""Build today's per-country Instagram cardnews (PNG cards + docx caption)
-from the info_*.json blocks under pipeline/scratch/, using cardnews_gen.py
-(Pillow renderer) and cardnews_caption.py (docx writer) per cardnews_design.md."""
+"""Build today's per-country cardnews from pipeline/scratch/info_*.json."""
+from __future__ import annotations
+
+import datetime
 import json
 import os
 import re
 import sys
-import io
-import datetime
+from pathlib import Path
 
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from cardnews_gen import make_cover, make_body
+HERE = Path(__file__).resolve().parent
+if str(HERE) not in sys.path:
+    sys.path.insert(0, str(HERE))
+
 from cardnews_caption import save_caption
-from watch_runtime import load_watch
+from cardnews_gen import make_cover, make_segment_card
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-PROJ = os.path.dirname(HERE)
-SCRATCH = os.path.join(HERE, "scratch")
-THUMBS = os.path.join(HERE, "thumbs")
+ROOT = HERE.parent
+SCRATCH = HERE / "scratch"
+THUMBS = HERE / "thumbs"
 DATE = os.environ.get("RUN_DATE") or datetime.date.today().isoformat()
 DATE_DOT = DATE.replace("-", ".")
+OUT_ROOT = ROOT / f"카드뉴스_{DATE}"
 
-COUNTRY_CODE = {"한국": "KR", "일본": "JP", "미국": "US"}
-OUT_ROOT = os.path.join(PROJ, f"카드뉴스_{DATE}")
-
-
-def vid(url):
-    m = re.search(r"[?&]v=([^&]+)", url)
-    return m.group(1) if m else url.rsplit("/", 1)[-1]
-
-
-def safe(name):
-    return re.sub(r'[\\/:*?"<>|]', "", name)
+COUNTRIES = [
+    ("한국", "KR"),
+    ("일본", "JP"),
+    ("미국", "US"),
+]
 
 
-def load(country):
-    with open(os.path.join(SCRATCH, f"info_{country}.json"), encoding="utf-8") as f:
-        items = json.load(f)
-    top3 = [it for it in items if it.get("type", "top3") == "top3"]
-    top3.sort(key=lambda it: it["rank"])
-    rising = next((it for it in items if it.get("type") == "rising"), None)
-    return top3, rising
+def safe_name(value: str) -> str:
+    return re.sub(r'[\\/:*?"<>|]', "", value or "").strip()
 
 
-def build_country(country):
-    code = COUNTRY_CODE[country]
-    top3, rising = load(country)
-    # watch_runtime stores its representative analyzed frame in THUMBS using
-    # the video id. cardnews_gen checks that cache before fetching YouTube's
-    # promotional thumbnail, so cards and analysis share the same visual.
-    frame_overrides = {
-        "ZcXMi--AOjk": "frame_0115.jpg",
-        "Y6VWPBmr1bg": "frame_0378.jpg",
-    }
-    for item in top3 + ([rising] if rising else []):
-        video_id = vid(item["링크"])
-        watched = load_watch(video_id)
-        if watched and watched.get("frames"):
-            selected = next((f for f in watched["frames"] if os.path.basename(f.get("path", "")) == frame_overrides.get(video_id)), None)
-            frame = (selected or watched["frames"][len(watched["frames"]) // 2]).get("path")
-            if frame and os.path.exists(frame):
-                import shutil
-                os.makedirs(THUMBS, exist_ok=True)
-                shutil.copyfile(frame, os.path.join(THUMBS, f"{video_id}.jpg"))
-    page_total = 5 if rising else 4
-    out_dir = os.path.join(OUT_ROOT, country)
-    os.makedirs(out_dir, exist_ok=True)
-
-    rank_lines = [(None, it["제목_카드축약"], it["채널"]) for it in top3]
-    if rising:
-        rank_lines.append(("star", rising["제목_카드축약"], rising["채널"]))
-
-    make_cover(
-        vid(top3[0]["링크"]), THUMBS,
-        os.path.join(out_dir, "01_표지.png"),
-        code, country, DATE_DOT, page_total, rank_lines,
-    )
-
-    for it in top3:
-        out_name = f"{it['rank']+1:02d}_{country}{it['rank']}위_{safe(it['채널'])}.png"
-        make_body(
-            vid(it["링크"]), THUMBS,
-            os.path.join(out_dir, out_name),
-            it["rank"] + 1, page_total, code,
-            f"{country} {it['rank']}위", it["채널"],
-            it["제목_카드축약"], it["소개"], is_rising=False,
-        )
-
-    if rising:
-        out_name = f"{page_total:02d}_라이징_{safe(rising['채널'])}.png"
-        rising_desc = rising["소개"] + " 지금 급상승 중! 팔로우·저장 ✅"
-        make_body(
-            vid(rising["링크"]), THUMBS,
-            os.path.join(out_dir, out_name),
-            page_total, page_total, code,
-            "", rising["채널"],
-            rising["제목_카드축약"], rising_desc, is_rising=True,
-        )
-
-    build_caption(country, top3, rising, out_dir)
-    print(f"[{country}] {page_total}장 완료 -> {out_dir}")
+def load_items(country: str) -> list[dict]:
+    return json.loads((SCRATCH / f"info_{country}.json").read_text(encoding="utf-8"))
 
 
-def block(flag, country, label, it):
+def build_caption_lines(country: str, top3: list[dict], rising: dict | None) -> list[str]:
     lines = [
-        f"{flag} {country} {label}",
-        it["제목_한글"],
-        f"📺 채널: {it['채널']}",
-        f"👀 조회수: {it['조회수_만']}",
-        f"🚀 구독자대비조회수: {it['구독자대비조회수']} (구독자 {it['구독자_만']} 대비)",
-        f"📝 소개: {it['소개']}",
-        f"✅ 봐야 하는 이유: {it['봐야하는이유']}",
-        f"🔗 링크: {it['링크']}",
+        f"{DATE} 기준 {country} 오늘의 카드뉴스입니다.",
+        "각 영상은 자막 내용을 기준으로 3개 카드로 나눴고, 각 카드에는 실제 장면 캡처를 넣었습니다.",
         "",
     ]
+    for item in top3 + ([rising] if rising else []):
+        if not item:
+            continue
+        label = f"TOP {item['rank']}" if item.get("type") == "top3" else "급상승"
+        lines.append(f"[{label}] {item['title_full']}")
+        lines.append(f"채널: {item['channel']} | 조회수: {item['views_text']}")
+        for segment in item["segments"]:
+            lines.append(f"{segment['label']} {segment['title']} | {segment['summary']}")
+            lines.append(f"소개: {segment['note']}")
+        lines.append(f"링크: {item['url']}")
+        lines.append("")
     return lines
 
 
-def build_caption(country, top3, rising, out_dir):
-    flag = top3[0]["flag"]
-    top1 = top3[0]
-    lines = [
-        f"지금 {country}에서 가장 화제인 유튜브 영상 TOP3, 놓치면 후회합니다 🔥",
-        f"{flag} {country}은 {top1['채널']}의 \"{top1['제목_카드축약']}\" 영상이 지금 실시간으로 터지며 1위에 올랐는데요.",
-    ]
-    if rising:
-        lines.append(
-            f"특히 급상승 라이징 스타 {rising['채널']}은 구독자 대비 조회수가 {rising['구독자대비조회수']}까지 폭발적으로 터진 화제의 신흥 채널입니다."
-        )
-    lines += [
-        "내일은 또 어떤 영상이 터질지, 지금 저장하고 팔로우해서 가장 먼저 확인하세요 ✅",
-        "",
-        "—",
-        "",
-    ]
-    for i, it in enumerate(top3, 1):
-        lines += block(it["flag"], country, f"{i}위", it)
-    if rising:
-        lines += block(rising["flag"], country, "⭐ 라이징", rising)
-    lines += ["—", ""]
-    hashtag_extra = safe(top1["채널"]).replace(" ", "")
-    lines.append(f"#유튜브순위 #유튜브이슈 #오늘의영상 #{country}유튜버")
-    lines.append(f"#트렌드 #카드뉴스 #{hashtag_extra}")
+def build_country(country: str, code: str) -> None:
+    items = load_items(country)
+    top3 = [item for item in items if item.get("type") == "top3"]
+    top3.sort(key=lambda item: item["rank"])
+    rising = next((item for item in items if item.get("type") == "rising"), None)
+    page_total = 1 + len(top3) * 3 + (3 if rising else 0)
 
-    out_path = os.path.join(out_dir, f"캡션_{country}.docx")
-    save_caption(out_path, lines)
+    out_dir = OUT_ROOT / country
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    rank_lines = [(None, item["title_card"], item["channel"]) for item in top3]
+    if rising:
+        rank_lines.append(("star", rising["title_card"], rising["channel"]))
+    make_cover(
+        top3[0]["video_id"],
+        str(THUMBS),
+        str(out_dir / "01_cover.png"),
+        code,
+        country,
+        DATE_DOT,
+        page_total,
+        rank_lines,
+    )
+
+    page_num = 2
+    for item in top3 + ([rising] if rising else []):
+        if not item:
+            continue
+        header_suffix = "급상승" if item.get("type") == "rising" else f"TOP {item['rank']}"
+        header = f"{country} {header_suffix}"
+        for segment in item["segments"]:
+            out_name = (
+                f"{page_num:02d}_{item['type']}_{item['video_id']}_{segment['label'].replace('/', '-')}_"
+                f"{safe_name(item['channel'])}.png"
+            )
+            make_segment_card(
+                item["video_id"],
+                str(THUMBS),
+                str(out_dir / out_name),
+                segment.get("image"),
+                page_num,
+                page_total,
+                code,
+                header,
+                segment["label"],
+                item["title_card"],
+                item["channel"],
+                item["views_text"],
+                segment["title"],
+                segment["summary"],
+                segment["note"],
+            )
+            page_num += 1
+
+    save_caption(str(out_dir / f"캡션_{country}.docx"), build_caption_lines(country, top3, rising))
+    print(f"[build_cardnews] {country}: {page_total} pages -> {out_dir}")
+
+
+def main() -> None:
+    OUT_ROOT.mkdir(parents=True, exist_ok=True)
+    for country, code in COUNTRIES:
+        build_country(country, code)
 
 
 if __name__ == "__main__":
-    for country in ["한국", "일본", "미국"]:
-        build_country(country)
+    main()
